@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Abuja Ops — System Architecture</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet"/>
+<style>
+  :root {
+    --bg: #0d0f14;
+    --surface: #141720;
+    --border: #1e2330;
+    --green: #25d366;
+    --green-dim: #1a9e4a;
+    --amber: #f59e0b;
+    --blue: #3b82f6;
+    --red: #ef4444;
+    --purple: #a855f7;
+    --text: #e8eaf0;
+    --muted: #6b7280;
+    --mono: 'DM Mono', monospace;
+    --sans: 'DM Sans', sans-serif;
+    --display: 'Syne', sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: var(--sans); min-height: 100vh; }
+
+  header {
+    padding: 32px 48px 24px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  header h1 { font-family: var(--display); font-size: 22px; font-weight: 800; letter-spacing: -0.5px; }
+  header h1 span { color: var(--green); }
+  .tag { font-family: var(--mono); font-size: 11px; background: var(--border); color: var(--muted); padding: 4px 10px; border-radius: 4px; }
+
+  .tabs {
+    display: flex; gap: 0;
+    border-bottom: 1px solid var(--border);
+    padding: 0 48px;
+  }
+  .tab {
+    padding: 14px 24px; font-family: var(--display); font-size: 13px; font-weight: 600;
+    color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent;
+    transition: all 0.2s; letter-spacing: 0.3px;
+  }
+  .tab.active { color: var(--green); border-bottom-color: var(--green); }
+  .tab:hover:not(.active) { color: var(--text); }
+
+  .panel { display: none; padding: 40px 48px; }
+  .panel.active { display: block; }
+
+  /* ── FLOW DIAGRAM ── */
+  .flow { display: flex; flex-direction: column; gap: 0; max-width: 860px; margin: 0 auto; }
+
+  .flow-row {
+    display: flex; align-items: center; gap: 0;
+  }
+
+  .node {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 20px;
+    flex: 1;
+    position: relative;
+  }
+  .node.highlight { border-color: var(--green); background: #0d1f14; }
+  .node.ai { border-color: var(--purple); background: #110d1f; }
+  .node.warn { border-color: var(--amber); background: #1a150a; }
+
+  .node-label {
+    font-family: var(--mono); font-size: 10px; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px;
+  }
+  .node-title { font-family: var(--display); font-size: 15px; font-weight: 700; }
+  .node-desc { font-size: 12px; color: var(--muted); margin-top: 4px; line-height: 1.5; }
+
+  .node.highlight .node-title { color: var(--green); }
+  .node.ai .node-title { color: var(--purple); }
+  .node.warn .node-title { color: var(--amber); }
+
+  .arrow-v {
+    width: 2px; background: var(--border); height: 36px;
+    margin: 0 auto; position: relative; flex-shrink: 0;
+  }
+  .arrow-v::after {
+    content: ''; position: absolute; bottom: -1px; left: 50%; transform: translateX(-50%);
+    border-left: 5px solid transparent; border-right: 5px solid transparent;
+    border-top: 7px solid var(--border);
+  }
+  .arrow-v.green { background: var(--green); }
+  .arrow-v.green::after { border-top-color: var(--green); }
+  .arrow-v.purple { background: var(--purple); }
+  .arrow-v.purple::after { border-top-color: var(--purple); }
+
+  .arrow-h {
+    height: 2px; background: var(--border); width: 32px; flex-shrink: 0; position: relative;
+  }
+  .arrow-h::after {
+    content: ''; position: absolute; right: -1px; top: 50%; transform: translateY(-50%);
+    border-top: 5px solid transparent; border-bottom: 5px solid transparent;
+    border-left: 7px solid var(--border);
+  }
+
+  .row-wrap { display: flex; align-items: stretch; gap: 12px; }
+  .row-wrap .node { flex: 1; }
+
+  .arrow-wrap { display: flex; justify-content: center; }
+  .arrow-wrap.left { justify-content: flex-start; padding-left: calc(33% + 6px); }
+
+  .badge {
+    display: inline-block; font-family: var(--mono); font-size: 10px;
+    padding: 2px 8px; border-radius: 4px; margin-top: 6px;
+  }
+  .badge.new { background: #0d2818; color: var(--green); }
+  .badge.existing { background: #1a1520; color: var(--muted); }
+  .badge.ai-badge { background: #1a0d2e; color: var(--purple); }
+
+  .section-label {
+    font-family: var(--mono); font-size: 10px; letter-spacing: 2px;
+    text-transform: uppercase; color: var(--muted); margin-bottom: 20px;
+  }
+
+  /* ── PRICING ── */
+  .pricing-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; max-width: 900px; }
+  .price-card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    padding: 24px; position: relative; overflow: hidden;
+  }
+  .price-card.featured { border-color: var(--green); }
+  .price-card::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+    background: var(--border);
+  }
+  .price-card.featured::before { background: var(--green); }
+  .price-card.p2::before { background: var(--blue); }
+  .price-card.p3::before { background: var(--amber); }
+  .price-card.p4::before { background: var(--purple); }
+
+  .phase-num { font-family: var(--mono); font-size: 11px; color: var(--muted); margin-bottom: 8px; }
+  .phase-title { font-family: var(--display); font-size: 17px; font-weight: 700; margin-bottom: 4px; }
+  .phase-timeline { font-size: 12px; color: var(--muted); margin-bottom: 16px; }
+  .phase-price { font-family: var(--display); font-size: 28px; font-weight: 800; color: var(--green); }
+  .phase-price.blue { color: var(--blue); }
+  .phase-price.amber { color: var(--amber); }
+  .phase-price.purple { color: var(--purple); }
+  .phase-items { margin-top: 16px; display: flex; flex-direction: column; gap: 6px; }
+  .phase-item { font-size: 12px; color: var(--muted); display: flex; gap: 8px; align-items: flex-start; }
+  .phase-item::before { content: '→'; color: var(--green); flex-shrink: 0; font-family: var(--mono); }
+
+  .total-bar {
+    grid-column: 1 / -1;
+    background: #0d1f14; border: 1px solid var(--green);
+    border-radius: 12px; padding: 24px 28px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .total-bar .label { font-family: var(--display); font-size: 16px; font-weight: 700; }
+  .total-bar .amount { font-family: var(--display); font-size: 32px; font-weight: 800; color: var(--green); }
+  .total-bar .sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+  .monthly-bar {
+    grid-column: 1 / -1;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 20px 28px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+
+  /* ── AI EXPLANATION ── */
+  .ai-box {
+    background: #110d1f; border: 1px solid var(--purple);
+    border-radius: 12px; padding: 28px; max-width: 860px; margin-bottom: 24px;
+  }
+  .ai-box h3 { font-family: var(--display); font-size: 16px; font-weight: 700; color: var(--purple); margin-bottom: 16px; }
+
+  .example-flow {
+    display: grid; grid-template-columns: 1fr 40px 1fr; gap: 0; align-items: center;
+    background: var(--bg); border-radius: 8px; overflow: hidden; border: 1px solid var(--border);
+  }
+  .ex-in, .ex-out {
+    padding: 20px; font-family: var(--mono); font-size: 12px; line-height: 1.8;
+  }
+  .ex-in { color: var(--muted); border-right: 1px solid var(--border); }
+  .ex-out { color: var(--text); }
+  .ex-arrow {
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px; color: var(--purple);
+  }
+  .ex-label { font-family: var(--mono); font-size: 10px; color: var(--muted); margin-bottom: 8px; letter-spacing: 1px; }
+  .highlight-green { color: var(--green); }
+  .highlight-amber { color: var(--amber); }
+  .highlight-blue { color: var(--blue); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Abuja <span>Ops</span> — System Architecture</h1>
+  <span class="tag">v2.0 · AI-Powered</span>
+</header>
+
+<div class="tabs">
+  <div class="tab active" onclick="show('flow')">Flow Diagram</div>
+  <div class="tab" onclick="show('ai')">AI Parsing</div>
+  <div class="tab" onclick="show('pricing')">Pricing</div>
+</div>
+
+<!-- ── FLOW ── -->
+<div class="panel active" id="flow">
+  <p style="font-size:13px; color:var(--muted); margin-bottom:32px; max-width:640px;">
+    The new architecture. Merchants and their groups stay exactly the same.
+    The only thing that changes is what staff do with the centralised group — instead of manually sorting, they paste into the bot.
+  </p>
+
+  <div class="flow">
+
+    <div class="section-label">Existing (unchanged)</div>
+    <div class="row-wrap">
+      <div class="node warn">
+        <div class="node-label">Merchant Layer</div>
+        <div class="node-title">60+ Merchants</div>
+        <div class="node-desc">Drop orders in their own WhatsApp groups. Messy, unstructured, different every time.</div>
+        <span class="badge existing">stays the same</span>
+      </div>
+      <div class="node warn">
+        <div class="node-label">Staff Layer</div>
+        <div class="node-title">Staff picks up orders</div>
+        <div class="node-desc">Manually reads merchant groups, copies orders one by one.</div>
+        <span class="badge existing">stays the same</span>
+      </div>
+    </div>
+
+    <div class="arrow-wrap">
+      <div class="arrow-v green" style="height:40px;"></div>
+    </div>
+
+    <div class="section-label">New — the change happens here</div>
+    <div class="node highlight">
+      <div class="node-label">Centralised Bot Number</div>
+      <div class="node-title">Staff pastes raw order into bot</div>
+      <div class="node-desc">Staff copy-pastes the messy merchant order directly into this WhatsApp number. No reformatting needed. The bot handles everything from here.</div>
+      <span class="badge new">new</span>
+    </div>
+
+    <div class="arrow-wrap">
+      <div class="arrow-v purple" style="height:40px;"></div>
+    </div>
+
+    <div class="node ai">
+      <div class="node-label">AI Layer — Claude / Gemini</div>
+      <div class="node-title">AI parses & structures the order</div>
+      <div class="node-desc">No matter how messy the input, AI extracts: order number, merchant name, package, customer name, phone numbers, location, availability. Returns clean structured JSON.</div>
+      <span class="badge ai-badge">new · core intelligence</span>
+    </div>
+
+    <div class="arrow-wrap">
+      <div class="arrow-v green" style="height:40px;"></div>
+    </div>
+
+    <div class="row-wrap">
+      <div class="node highlight">
+        <div class="node-label">Sorting Engine</div>
+        <div class="node-title">Sort by location</div>
+        <div class="node-desc">Groups orders by Abuja area — Apo, Wuse, Garki, Maitama etc. Assigns sequential order IDs (#1, #2, #3...).</div>
+        <span class="badge new">new</span>
+      </div>
+      <div class="node highlight">
+        <div class="node-label">Bot Reply</div>
+        <div class="node-title">Sends sorted list back</div>
+        <div class="node-desc">Bot replies to the group with a clean, numbered, location-grouped order sheet. Staff sees it instantly.</div>
+        <span class="badge new">new</span>
+      </div>
+      <div class="node highlight">
+        <div class="node-label">Database</div>
+        <div class="node-title">Saved to Supabase</div>
+        <div class="node-desc">Every order persisted with merchant, customer, location, status, timestamp.</div>
+        <span class="badge new">new</span>
+      </div>
+    </div>
+
+    <div class="arrow-wrap">
+      <div class="arrow-v green" style="height:40px;"></div>
+    </div>
+
+    <div class="node highlight">
+      <div class="node-label">Ops Dashboard</div>
+      <div class="node-title">Live dashboard — filter, search, manage</div>
+      <div class="node-desc">Full order visibility. Filter by location, merchant, status. Mark delivered. Export daily report. No more paper grids.</div>
+      <span class="badge new">from MVP</span>
+    </div>
+
+  </div>
+</div>
+
+<!-- ── AI PARSING ── -->
+<div class="panel" id="ai">
+  <div class="ai-box">
+    <h3>⬡ How AI parsing works</h3>
+    <p style="font-size:13px; color:var(--muted); margin-bottom:20px; line-height:1.7;">
+      Staff pastes a raw merchant order — any format, any messiness. The AI reads it like a human would and extracts clean structured data. No regex, no templates, no training required.
+    </p>
+    <div class="example-flow">
+      <div class="ex-in">
+        <div class="ex-label">RAW INPUT (what staff pastes)</div>
+        Ifeoma 8/ WK 1<br><br>
+        Package: N21,000 - 1 Pack of Eye<br>
+        Serum + 1 Free Makeup Pad,<br>
+        1 Free Lip Balm and 1 Free Eye<br>
+        Mask (SOLO BUY)<br><br>
+        Name: tina ugo<br><br>
+        Location: Cityscape garden estate,<br>
+        canary str, apo wumba Abuja plot 39<br><br>
+        08136032722<br>
+        08072746122<br><br>
+        Available to receive today
+      </div>
+      <div class="ex-arrow">→</div>
+      <div class="ex-out">
+        <div class="ex-label">STRUCTURED OUTPUT</div>
+        <span class="highlight-amber">merchant:</span> Ifeoma<br>
+        <span class="highlight-amber">week:</span> WK1<br>
+        <span class="highlight-amber">package:</span> Eye Serum Pack<br>
+        <span class="highlight-amber">amount:</span> ₦21,000<br>
+        <span class="highlight-amber">customer:</span> Tina Ugo<br>
+        <span class="highlight-amber">phone1:</span> 08136032722<br>
+        <span class="highlight-amber">phone2:</span> 08072746122<br>
+        <span class="highlight-amber">area:</span> <span class="highlight-green">Apo</span><br>
+        <span class="highlight-amber">address:</span> Cityscape, Canary St<br>
+        <span class="highlight-amber">status:</span> <span class="highlight-green">Available today</span><br>
+        <span class="highlight-amber">order_id:</span> <span class="highlight-blue">#3</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="ai-box" style="border-color: var(--green);">
+    <h3 style="color:var(--green);">⬡ Bot reply to the group (after sorting)</h3>
+    <div style="background:var(--bg); border-radius:8px; padding:20px; font-family:var(--mono); font-size:12px; line-height:2; color:var(--text);">
+      📦 <strong>TODAY'S ORDERS — SORTED BY LOCATION</strong><br><br>
+      <span style="color:var(--green);">── APO ──</span><br>
+      #3 Tina Ugo · Cityscape, Canary St · <span style="color:var(--muted);">08136032722</span> · Eye Serum ₦21k · <span style="color:var(--green);">Ready today</span><br>
+      #7 Chuka Eze · Efab Estate, Phase 2 · <span style="color:var(--muted);">08023456789</span> · Hair Kit ₦15k · <span style="color:var(--muted);">Tomorrow</span><br><br>
+      <span style="color:var(--blue);">── WUSE ──</span><br>
+      #1 Ada Nwosu · Zone 6, Wuse · <span style="color:var(--muted);">07012345678</span> · Skin Pack ₦18k · <span style="color:var(--green);">Ready today</span><br><br>
+      <span style="color:var(--amber);">── GARKI ──</span><br>
+      #5 Emeka Obi · Area 11, Garki · <span style="color:var(--muted);">08098765432</span> · Lip Kit ₦9k · <span style="color:var(--green);">Ready today</span><br><br>
+      <span style="color:var(--muted); font-size:11px;">Total: 4 orders · 3 locations · Generated 11:42am</span>
+    </div>
+  </div>
+</div>
+
+<!-- ── PRICING ── -->
+<div class="panel" id="pricing">
+  <p style="font-size:13px; color:var(--muted); margin-bottom:28px; max-width:640px;">
+    Precise breakdown based on the updated scope. AI parsing is the core new addition that justifies the higher end of your range.
+  </p>
+
+  <div class="pricing-grid">
+
+    <div class="price-card featured">
+      <div class="phase-num">PHASE 1</div>
+      <div class="phase-title">Foundation & AI Parser</div>
+      <div class="phase-timeline">2 weeks</div>
+      <div class="phase-price">₦250,000</div>
+      <div class="phase-items">
+        <div class="phase-item">Git init, code cleanup, error handling</div>
+        <div class="phase-item">AI integration (Claude/Gemini) for order parsing</div>
+        <div class="phase-item">Structured data extraction from any format</div>
+        <div class="phase-item">Location detection & area grouping (Abuja zones)</div>
+        <div class="phase-item">Sequential order ID assignment (#1, #2...)</div>
+        <div class="phase-item">Bot replies with sorted order list to group</div>
+      </div>
+    </div>
+
+    <div class="price-card p2">
+      <div class="phase-num">PHASE 2</div>
+      <div class="phase-title">WhatsApp Business + Cloud</div>
+      <div class="phase-timeline">1–2 weeks</div>
+      <div class="phase-price blue">₦150,000</div>
+      <div class="phase-items">
+        <div class="phase-item">WhatsApp Business API approval (verified number)</div>
+        <div class="phase-item">Interactive reply buttons (Submit / Cancel)</div>
+        <div class="phase-item">Cloud deployment — 24/7 uptime (Railway/Render)</div>
+        <div class="phase-item">Custom domain + SSL</div>
+        <div class="phase-item">Auto-restart on crash (PM2)</div>
+      </div>
+    </div>
+
+    <div class="price-card p3">
+      <div class="phase-num">PHASE 3</div>
+      <div class="phase-title">Ops Dashboard v2</div>
+      <div class="phase-timeline">2 weeks</div>
+      <div class="phase-price amber">₦200,000</div>
+      <div class="phase-items">
+        <div class="phase-item">Full dashboard rebuild for new data model</div>
+        <div class="phase-item">Filter by merchant, location, status, date</div>
+        <div class="phase-item">Order status workflow (New → Dispatched → Delivered)</div>
+        <div class="phase-item">Staff can edit/correct AI-parsed orders</div>
+        <div class="phase-item">CSV/Excel export — daily order sheet</div>
+      </div>
+    </div>
+
+    <div class="price-card p4">
+      <div class="phase-num">PHASE 4</div>
+      <div class="phase-title">Reports & Admin</div>
+      <div class="phase-timeline">1–2 weeks</div>
+      <div class="phase-price purple">₦150,000</div>
+      <div class="phase-items">
+        <div class="phase-item">Admin panel — manage merchants, staff, zones</div>
+        <div class="phase-item">Daily summary auto-sent to group at EOD</div>
+        <div class="phase-item">Merchant performance reports</div>
+        <div class="phase-item">Order analytics — volume by area, by merchant</div>
+      </div>
+    </div>
+
+    <div class="total-bar">
+      <div>
+        <div class="label">Total Build (Phases 1–4)</div>
+        <div class="sub">One-time · all phases · full handover</div>
+      </div>
+      <div class="amount">₦750,000</div>
+    </div>
+
+    <div class="monthly-bar">
+      <div>
+        <div class="label" style="font-family:var(--display); font-size:15px; font-weight:600;">Monthly Retainer</div>
+        <div class="sub" style="font-size:12px; color:var(--muted); margin-top:4px;">Hosting · AI API costs · support · minor updates</div>
+      </div>
+      <div style="font-family:var(--display); font-size:22px; font-weight:800; color:var(--muted);">₦60,000<span style="font-size:14px; font-weight:400;">/mo</span></div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+function show(id) {
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  event.target.classList.add('active');
+}
+</script>
+</body>
+</html>
