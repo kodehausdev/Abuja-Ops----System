@@ -143,6 +143,14 @@ async function handleMessage(from, text) {
     const result = await parseOrder(block);
 
     if (!result.success) {
+      if (result.error === 'AI_DOWN') {
+        // Notify staff AI is down — they need to enter manually
+        await send(from,
+          `⚠️ *AI parser is temporarily unavailable.*\n\n` +
+          `Please try again in a few minutes, or enter the order manually on the dashboard.\n\n` +
+          `Raw text saved for reference:\n${block.slice(0, 200)}...`
+        );
+      }
       results.failed.push(block.split('\n')[0].trim());
       continue;
     }
@@ -177,7 +185,7 @@ async function sendResults(from, results, isBulk) {
   // Send each saved order confirmation individually
   for (const o of results.saved) {
     const outside = o.is_outside_abuja ? ' ⚠️' : '';
-    let msg = `✅ *Order #${o.order_number} 🎉🎉*\n\n`;
+    let msg = `✅ *Order #${o.order_number} confirmed!*\n\n`;
     msg += `📍 Zone: *${o.zone}*${outside}\n`;
     msg += `👤 ${o.customer_name}\n`;
     msg += `📱 ${o.customer_phone1}${o.customer_phone2 ? ' / ' + o.customer_phone2 : ''}\n`;

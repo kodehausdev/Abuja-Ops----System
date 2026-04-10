@@ -196,7 +196,15 @@ async function parseOrder(rawText) {
     return { success: true, data: parsed };
   } catch (err) {
     console.error('Parse error:', err.message);
-    return { success: false, error: err.message };
+    const isApiDown = err.message?.includes('fetch') || err.message?.includes('network') ||
+                      err.message?.includes('503') || err.message?.includes('429') ||
+                      err.message?.includes('quota');
+    return {
+      success: false,
+      error: isApiDown
+        ? 'AI_DOWN'
+        : err.message
+    };
   }
 }
 
