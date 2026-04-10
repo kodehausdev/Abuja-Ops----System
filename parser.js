@@ -3,7 +3,6 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
-// All 84 TCD delivery zones
 const ZONES = [
   'ABAJI','ACO ESTATE','AIRPORT','AMAC MARKET','ANGADA','ADO/ NEW NYANYA',
   'APO','APO MECH','APO RESETTL','ASO B','ASOKORO','ASOKORO EXTENSION',
@@ -19,29 +18,125 @@ const ZONES = [
   'WASA','WUMBA','WUSE','WUSE 2','WUSE ZONE 1 - 6','WUYE','ZUBA','ZUMA VILLAGE'
 ];
 
+// Address keyword → zone overrides (checked before AI zone is used)
+const KEYWORD_OVERRIDES = [
+  // ── Asokoro area ──
+  { keywords: ['guzape'], zone: 'ASOKORO EXTENSION' },
+  { keywords: ['asokoro extension'], zone: 'ASOKORO EXTENSION' },
+  { keywords: ['naf valley', 'nafvalley', 'airforce base asokoro', 'mogadishu cantonment', 'navy gate'], zone: 'ASOKORO' },
+  // ── Mararaba — Nasarawa state but TCD delivers here ──
+  { keywords: ['mararaba', 'maraba'], zone: 'MARARABA' },
+  // ── Nyanya area ──
+  { keywords: ['new nyanya', 'new-nyanya'], zone: 'ADO/ NEW NYANYA' },
+  { keywords: ['nyanya barracks', 'mopol 21 nyanya', 'mopol'], zone: 'NYANYA' },
+  // ── Karu / Karshi / Kurudu ──
+  { keywords: ['kurudu', 'kuradu', 'police housing estate kurudu', 'police house estate kurudu'], zone: 'KURADU' },
+  { keywords: ['karshi', 'karshi bye pass', 'karshi bypass', 'apo karshi'], zone: 'KARU' },
+  { keywords: ['karu site', 'karu lga', 'city college mararaba', 'new karu'], zone: 'NEW KARU' },
+  // ── CBD area ──
+  { keywords: ['federal secretariat', 'head of service', 'area 10', 'ship house', 'central area', 'central business district', 'national hospital'], zone: 'CBD' },
+  { keywords: ['national assembly'], zone: 'NATIONAL ASSEMBLY' },
+  // ── Wuse ──
+  { keywords: ['wuse 2'], zone: 'WUSE 2' },
+  { keywords: ['wuse zone'], zone: 'WUSE ZONE 1 - 6' },
+  // ── Other FCT zones ──
+  { keywords: ['life camp'], zone: 'LIFE CAMP' },
+  { keywords: ['katampe extension'], zone: 'KATAMPE EXTENSION' },
+  { keywords: ['kubwa'], zone: 'KUBWA' },
+  { keywords: ['lugbe'], zone: 'LUGBE' },
+  { keywords: ['lokogoma'], zone: 'LOKOGOMA' },
+  { keywords: ['apo mechanic', 'apo mech'], zone: 'APO MECH' },
+  { keywords: ['kugbo mechanic', 'kugbo'], zone: 'KARU' },
+  { keywords: ['wumba', 'apo resettlement', 'apo resettl'], zone: 'APO RESETTL' },
+  { keywords: ['games village', 'games viii', 'games vii'], zone: 'GAMES VII' },
+  { keywords: ['galadimawa'], zone: 'GALADIMAWA' },
+  { keywords: ['galadima'], zone: 'GALADIMA' },
+  { keywords: ['dawaki'], zone: 'DAWAKI' },
+  { keywords: ['dei-dei', 'dei dei'], zone: 'DEI-DEI' },
+  { keywords: ['durumi'], zone: 'DURUMI' },
+  { keywords: ['gudu'], zone: 'GUDU' },
+  { keywords: ['gwagwalada'], zone: 'GWAGWALADA' },
+  { keywords: ['gwarimpa'], zone: 'GWARIMPA' },
+  { keywords: ['kabusa garden'], zone: 'KABUSA GARDEN' },
+  { keywords: ['kabusa village'], zone: 'KABUSA VILLAGE' },
+  { keywords: ['kabusa'], zone: 'KABUSA' },
+  { keywords: ['kado'], zone: 'KADO' },
+  { keywords: ['karimo'], zone: 'KARIMO' },
+  { keywords: ['karsana'], zone: 'KARSANA' },
+  { keywords: ['sunny vale', 'sunnyvale'], zone: 'SUNNY VALE' },
+  { keywords: ['tungamaje', 'tunga maje'], zone: 'TUNGAMAJE' },
+  { keywords: ['utako'], zone: 'UTAKO' },
+  { keywords: ['wuye'], zone: 'WUYE' },
+  { keywords: ['zuba'], zone: 'ZUBA' },
+  { keywords: ['mpape'], zone: 'MPAPE' },
+  { keywords: ['orozo'], zone: 'OROZO' },
+  { keywords: ['masaka'], zone: 'MASAKA' },
+  { keywords: ['mabushi'], zone: 'MABUSHI' },
+  { keywords: ['jabi'], zone: 'JABI' },
+  { keywords: ['jahi'], zone: 'JAHI' },
+  { keywords: ['wasa'], zone: 'WASA' },
+  { keywords: ['citec'], zone: 'CITEC' },
+  { keywords: ['dakwa'], zone: 'DAKWA' },
+  { keywords: ['jikowyi', 'jikwoyi'], zone: 'JIKOWYI' },
+];
+
+// These are outside Abuja — flag with warning
+// Note: Mararaba borders Abuja but TCD delivers there — NOT in this list
+const OUTSIDE_ABUJA_KEYWORDS = [
+  'nasarawa state', 'nassarawa state', 'keffi', 'kaduna',
+  'nasarawa local government', 'nasarawa lga', 'udege',
+  'lagos', 'surulere', 'ikeja', 'lekki', 'victoria island',
+  'port harcourt', 'ibadan', 'enugu', 'benin city', 'onitsha'
+];
+
+const OUTSIDE_ABUJA_ZONES = ['KEFFI', 'SULEJA', 'MADALA', 'KWALI'];
+
+function applyKeywordOverrides(address, aiZone) {
+  const lower = address.toLowerCase();
+  for (const rule of KEYWORD_OVERRIDES) {
+    if (rule.keywords.some(kw => lower.includes(kw))) {
+      return rule.zone;
+    }
+  }
+  return aiZone;
+}
+
+function checkOutsideAbuja(address, zone) {
+  const lower = address.toLowerCase();
+  // Mararaba is always inside — don't flag it even if Nasarawa is mentioned nearby
+  if (zone === 'MARARABA') return false;
+  if (OUTSIDE_ABUJA_KEYWORDS.some(kw => lower.includes(kw))) return true;
+  if (OUTSIDE_ABUJA_ZONES.includes(zone)) return true;
+  return false;
+}
+
 const PROMPT = `You are an order parser for TCD, a delivery company in Abuja, Nigeria.
 
-Extract order details from the raw text below and return ONLY valid JSON. No markdown, no explanation.
+Extract order details from the raw text and return ONLY valid JSON. No markdown, no explanation.
 
-Delivery zones list (match the address to the CLOSEST zone):
+ZONE LIST — pick the single best match from ONLY these zones:
 ${ZONES.join(', ')}
 
-Rules:
-- order_number: the # number at the start (just the number e.g. "3")
-- partner_name: the store/brand name if visible at the top (e.g. "VRW-HQ", "KUMBO", "ELA", "Amaka2") — leave empty string if none
-- customer_name: full name of the customer
-- customer_phone1: first phone number, digits only, no + or country code adjustments needed
-- customer_phone2: second phone number if present, else empty string
-- address: the delivery address as given
-- zone: pick the SINGLE best matching zone from the list above based on the address. Use "KEFFI" or "MARARABA" for Nasarawa/Keffi addresses. Use "ASOKORO" for Asokoro/NAF Valley/Guzape. Use "CBD" for Central Business District/Area 10/Central Area. Use "NYANYA" or "NEW KARU" for Nyanya/New Nyanya. Use "KARU" for Karu/Jikwoyi area.
-- product: what was ordered (keep it concise)
-- amount: numeric value only e.g. 57500
-- closer_name: name of the closer/agent if present, else empty string
-- closer_phone: closer phone if present, else empty string
-- notes: any special instructions (delivery time, color preference, schedule etc), else empty string
-- is_outside_abuja: true if delivery is clearly outside Abuja (Keffi, Nasarawa state, Kaduna etc), false otherwise
+ZONE RULES (follow exactly):
+- "Guzape", "Asokoro extension" → ASOKORO EXTENSION
+- "NAF Valley", "Nafvalley Airforce", "Mogadishu Cantonment", "Navy Gate" → ASOKORO
+- "Mararaba", "Maraba" → MARARABA (TCD delivers here, do NOT mark outside Abuja)
+- "New Nyanya" → ADO/ NEW NYANYA
+- "Nyanya barracks", "Mopol" → NYANYA
+- "Kurudu", "Kuradu", "Police housing estate kurudu" → KURADU (this is in Abuja, NOT Karu)
+- "Karshi", "Karshi bypass" → KARU
+- "New Karu", "Karu site" → NEW KARU
+- "CBD", "Central Area", "Federal Secretariat", "Area 10", "National Hospital" → CBD
+- "Kugbo", "Apo mechanic" → APO MECH
+- "Wumba", "Apo resettlement" → APO RESETTL
+- Nasarawa state (NOT Mararaba), Keffi → KEFFI — mark is_outside_abuja: true
+- order_number: ALWAYS use the # number at the very TOP of the message. NEVER use CRM reference numbers like "Daggo Group-CRM-ORD-..." or "CSS-2026-..." — those are partner internal IDs.
+- partner_name: the store/brand/agent who submitted the order. Can appear in TWO places: (1) TOP of message before customer details as a code e.g. "VRW-HQ", "KUMBO", "ELA", or (2) BOTTOM of message as a standalone single name on the very last line with no label e.g. "Loveth", "Oluwaferanmi". A bottom partner is a first name or short name appearing alone after all order details are complete. If no clear partner found, leave empty.
+- closer_name: only if explicitly labeled "Closer name:" or "Closer:". Do not confuse with partner name at bottom.
+- is_outside_abuja: true ONLY for Nasarawa state (not Mararaba), Kaduna, Lagos. Mararaba = false.
+- If address contains an email address, ignore it and use the actual delivery address instead.
 
-Return this exact JSON structure:
+Return this exact JSON:
 {
   "order_number": "",
   "partner_name": "",
@@ -60,13 +155,44 @@ Return this exact JSON structure:
 
 async function parseOrder(rawText) {
   try {
-    const model = genAI.getGenerativeModel({ model: 'gemini-flash-latest' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
     const result = await model.generateContent(`${PROMPT}\n\nRAW ORDER:\n${rawText}`);
     const text = result.response.text().trim();
 
-    // Strip markdown fences if present
-    const clean = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-    const parsed = JSON.parse(clean);
+    // Try multiple extraction strategies
+    let parsed = null;
+
+    // Strategy 1: strip markdown fences
+    try {
+      const clean = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+      parsed = JSON.parse(clean);
+    } catch {}
+
+    // Strategy 2: extract first { ... } block
+    if (!parsed) {
+      try {
+        const match = text.match(/\{[\s\S]*\}/);
+        if (match) parsed = JSON.parse(match[0]);
+      } catch {}
+    }
+
+    if (!parsed) {
+      console.error('Parse error — raw response:', text.slice(0, 200));
+      return { success: false, error: 'Could not extract JSON from AI response' };
+    }
+
+    // Safety net: if order_number is a CRM reference, extract #N from raw text
+    if (parsed.order_number && parsed.order_number.toString().length > 6) {
+      const match = rawText.match(/^#(\d+)/m);
+      if (match) parsed.order_number = match[1];
+    }
+
+    // Apply keyword overrides for zone precision
+    if (parsed.address) {
+      parsed.zone = applyKeywordOverrides(parsed.address, parsed.zone);
+      parsed.is_outside_abuja = checkOutsideAbuja(parsed.address, parsed.zone);
+    }
+
     return { success: true, data: parsed };
   } catch (err) {
     console.error('Parse error:', err.message);

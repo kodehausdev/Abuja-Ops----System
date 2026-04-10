@@ -3,278 +3,1747 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Abuja Ops — Order Dashboard</title>
+<title>TCD — Operations Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@400;500&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet"/>
 <style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f4f5f7; color: #1a1a2e; }
+:root {
+  --bg:       #0a0c10;
+  --surface:  #111318;
+  --card:     #161a22;
+  --border:   #1e2330;
+  --border2:  #252c3a;
+  --green:    #22c55e;
+  --green-dim:#16a34a;
+  --green-bg: #0d2018;
+  --amber:    #f59e0b;
+  --amber-bg: #1a1506;
+  --blue:     #3b82f6;
+  --blue-bg:  #0d1525;
+  --red:      #ef4444;
+  --red-bg:   #1a0808;
+  --purple:   #a855f7;
+  --text:     #e2e8f0;
+  --muted:    #64748b;
+  --muted2:   #94a3b8;
+  --display:  'Syne', sans-serif;
+  --body:     'Instrument Sans', sans-serif;
+  --mono:     'JetBrains Mono', monospace;
+}
 
-  header {
-    background: #1a1a2e;
-    color: white;
-    padding: 18px 32px;
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--body);
+  font-size: 13px;
+  min-height: 100vh;
+  line-height: 1.5;
+}
+
+/* ── HEADER ── */
+header {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 0 28px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.logo-mark {
+  width: 28px;
+  height: 28px;
+  background: var(--green);
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--display);
+  font-weight: 800;
+  font-size: 13px;
+  color: #000;
+}
+
+.logo-text {
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: -0.3px;
+}
+
+.logo-text span { color: var(--green); }
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.live-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--green-bg);
+  border: 1px solid var(--green-dim);
+  border-radius: 20px;
+  padding: 4px 12px;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--green);
+}
+
+.live-dot {
+  width: 6px;
+  height: 6px;
+  background: var(--green);
+  border-radius: 50%;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.5;transform:scale(.8)} }
+
+.date-display {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.btn-refresh {
+  background: var(--border);
+  border: 1px solid var(--border2);
+  color: var(--muted2);
+  border-radius: 7px;
+  padding: 6px 14px;
+  font-family: var(--body);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all .15s;
+}
+.btn-refresh:hover { background: var(--border2); color: var(--text); }
+
+/* ── LAYOUT ── */
+.main { padding: 24px 28px; }
+
+/* ── STATS ── */
+.stats {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.stat {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 16px;
+  position: relative;
+  overflow: hidden;
+}
+
+.stat::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+}
+
+.stat.s-total::before  { background: var(--muted); }
+.stat.s-today::before  { background: var(--green); }
+.stat.s-pending::before{ background: var(--amber); }
+.stat.s-done::before   { background: var(--blue); }
+.stat.s-zones::before  { background: var(--purple); }
+.stat.s-revenue::before{ background: var(--green); }
+
+.stat-label {
+  font-family: var(--mono);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+
+.stat-value {
+  font-family: var(--display);
+  font-size: 24px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.stat.s-today .stat-value   { color: var(--green); }
+.stat.s-pending .stat-value { color: var(--amber); }
+.stat.s-done .stat-value    { color: var(--blue); }
+.stat.s-zones .stat-value   { color: var(--purple); }
+.stat.s-revenue .stat-value { color: var(--green); font-size: 18px; }
+
+/* ── CONTROLS ── */
+.controls {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.search-wrap {
+  position: relative;
+  flex: 1;
+  min-width: 200px;
+  max-width: 320px;
+}
+
+.search-wrap svg {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--muted);
+}
+
+input[type=text], select, input[type=date] {
+  background: var(--card);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-family: var(--body);
+  font-size: 12px;
+  outline: none;
+  transition: border-color .15s;
+}
+
+input[type=text] { padding-left: 32px; width: 100%; }
+input[type=text]:focus, select:focus, input[type=date]:focus { border-color: var(--border2); }
+
+select option { background: var(--card); }
+
+.tab-group {
+  display: flex;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 3px;
+  gap: 2px;
+  margin-left: auto;
+}
+
+.tab-btn {
+  padding: 5px 14px;
+  border-radius: 6px;
+  font-family: var(--body);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  transition: all .15s;
+}
+.tab-btn.active { background: var(--border2); color: var(--text); }
+
+/* ── TABLE ── */
+.table-wrap {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow-x: auto;
+  overflow-y: visible;
+}
+
+table { width: 100%; border-collapse: collapse; min-width: 1200px; }
+
+thead {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+th {
+  padding: 10px 14px;
+  text-align: left;
+  font-family: var(--mono);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--muted);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+td {
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+
+tr:last-child td { border-bottom: none; }
+tr:hover td { background: rgba(255,255,255,.02); }
+
+.cell-num {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.cell-order {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.cell-partner {
+  font-size: 11px;
+  color: var(--muted2);
+}
+
+.cell-customer { font-weight: 500; }
+
+.cell-phone {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted2);
+}
+
+.cell-product {
+  font-size: 12px;
+  max-width: 160px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: default;
+}
+
+.cell-note {
+  font-size: 11px;
+  color: var(--muted2);
+  max-width: 120px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: text;
+}
+
+.zone-tag {
+  display: inline-block;
+  background: var(--blue-bg);
+  border: 1px solid rgba(59,130,246,.2);
+  color: #60a5fa;
+  border-radius: 5px;
+  padding: 2px 8px;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.zone-tag.outside {
+  background: var(--amber-bg);
+  border-color: rgba(245,158,11,.2);
+  color: var(--amber);
+}
+
+.cell-amount {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--green);
+  white-space: nowrap;
+}
+
+.cell-date {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+/* Status badges */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: 5px;
+  padding: 3px 8px;
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  white-space: nowrap;
+}
+.badge-pending    { background: var(--amber-bg);  color: var(--amber);  border: 1px solid rgba(245,158,11,.2); }
+.badge-dispatched { background: var(--blue-bg);   color: var(--blue);   border: 1px solid rgba(59,130,246,.2); }
+.badge-delivered  { background: var(--green-bg);  color: var(--green);  border: 1px solid rgba(34,197,94,.2); }
+.badge-failed     { background: var(--red-bg);    color: var(--red);    border: 1px solid rgba(239,68,68,.2); }
+
+/* T/C selector */
+.tc-select {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--muted2);
+  border-radius: 5px;
+  padding: 3px 6px;
+  font-family: var(--mono);
+  font-size: 10px;
+  cursor: pointer;
+  outline: none;
+}
+.tc-select.transfer { color: var(--green); border-color: rgba(34,197,94,.3); }
+.tc-select.cash     { color: var(--amber); border-color: rgba(245,158,11,.3); }
+
+/* Status selector */
+.status-select {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  outline: none;
+  appearance: none;
+  font-size: 0;
+  width: 20px;
+  height: 20px;
+}
+
+.action-btn {
+  background: var(--border);
+  border: 1px solid var(--border2);
+  color: var(--muted2);
+  border-radius: 5px;
+  padding: 4px 8px;
+  font-size: 10px;
+  cursor: pointer;
+  transition: all .15s;
+  font-family: var(--mono);
+}
+.action-btn:hover { background: var(--border2); color: var(--text); }
+.action-btn.deliver { border-color: rgba(34,197,94,.3); color: var(--green); }
+.action-btn.deliver:hover { background: var(--green-bg); }
+
+/* ── ZONE VIEW ── */
+.zone-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 12px;
+}
+
+.zone-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.zone-header {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--surface);
+}
+
+.zone-name {
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.zone-count {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--muted);
+  background: var(--border);
+  border-radius: 4px;
+  padding: 2px 7px;
+}
+
+.zone-order {
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+.zone-order:last-child { border-bottom: none; }
+
+.zone-order-info { flex: 1; min-width: 0; }
+.zone-order-num { font-family: var(--mono); font-size: 10px; color: var(--muted); }
+.zone-order-name { font-weight: 500; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.zone-order-product { font-size: 11px; color: var(--muted2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.zone-order-amount { font-family: var(--mono); font-size: 12px; color: var(--green); white-space: nowrap; }
+
+/* ── EMPTY STATE ── */
+.empty {
+  text-align: center;
+  padding: 60px 20px;
+  color: var(--muted);
+}
+.empty-icon { font-size: 32px; margin-bottom: 12px; opacity: .4; }
+.empty-text { font-size: 13px; }
+
+/* ── TOAST ── */
+.toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  background: var(--card);
+  border: 1px solid var(--border2);
+  border-radius: 10px;
+  padding: 12px 18px;
+  font-size: 12px;
+  display: none;
+  align-items: center;
+  gap: 8px;
+  z-index: 999;
+  animation: slideUp .2s ease;
+}
+.toast.show { display: flex; }
+@keyframes slideUp { from{transform:translateY(8px);opacity:0} to{transform:translateY(0);opacity:1} }
+
+.btn-print {
+  background: var(--border);
+  border: 1px solid var(--border2);
+  color: var(--muted2);
+  border-radius: 7px;
+  padding: 6px 14px;
+  font-family: var(--body);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all .15s;
+}
+.btn-print:hover { background: var(--green-bg); color: var(--green); border-color: var(--green-dim); }
+
+/* ── PRINT STYLES ── */
+@media print {
+  @page { size: A4 landscape; margin: 8mm; }
+
+  /* Force white background — kills the dark theme bleed */
+  html, body { background: #fff !important; color: #000 !important; }
+
+  /* Hide everything except print target */
+  body > * { display: none !important; }
+  #print-area { display: block !important; background: #fff !important; }
+
+  #print-area {
+    font-family: Arial, sans-serif;
+    font-size: 11px;
+    color: #000;
+    background: #fff;
+  }
+
+  /* ── CATALOGUE PRINT ── */
+  .print-header {
     display: flex;
-    align-items: center;
     justify-content: space-between;
+    align-items: flex-end;
+    border-bottom: 2px solid #000;
+    padding-bottom: 8px;
+    margin-bottom: 12px;
   }
-  header h1 { font-size: 18px; font-weight: 600; letter-spacing: -0.3px; }
-  header span { font-size: 13px; opacity: 0.5; }
-  .live-dot { display: inline-block; width: 8px; height: 8px; background: #25d366; border-radius: 50%; margin-right: 6px; animation: pulse 2s infinite; }
-  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+  .print-title { font-size: 18px; font-weight: 700; }
+  .print-meta { font-size: 10px; color: #555; text-align: right; }
 
-  .stats {
-    display: flex;
-    gap: 16px;
-    padding: 24px 32px 0;
-  }
-  .stat {
-    background: white;
-    border-radius: 10px;
-    padding: 18px 24px;
-    flex: 1;
-    border: 1px solid #e8e8e8;
-  }
-  .stat .label { font-size: 12px; color: #888; text-transform: uppercase; letter-spacing: 0.5px; }
-  .stat .value { font-size: 28px; font-weight: 700; margin-top: 4px; color: #1a1a2e; }
-  .stat.green .value { color: #25d366; }
-  .stat.amber .value { color: #f59e0b; }
-
-  .controls {
-    display: flex;
-    gap: 12px;
-    padding: 20px 32px 12px;
-    align-items: center;
-    flex-wrap: wrap;
-  }
-  input, select {
-    padding: 9px 14px;
-    border: 1px solid #e0e0e0;
-    border-radius: 8px;
-    font-size: 14px;
-    background: white;
-    outline: none;
-  }
-  input { width: 220px; }
-  input:focus, select:focus { border-color: #1a1a2e; }
-  .btn-refresh {
-    padding: 9px 18px;
-    background: #1a1a2e;
-    color: white;
-    border: none;
-    border-radius: 8px;
-    font-size: 14px;
-    cursor: pointer;
-    margin-left: auto;
-  }
-  .btn-refresh:hover { background: #2d2d4e; }
-
-  .table-wrap {
-    margin: 0 32px 32px;
-    background: white;
-    border-radius: 12px;
-    border: 1px solid #e8e8e8;
-    overflow: hidden;
-  }
-  table { width: 100%; border-collapse: collapse; font-size: 14px; }
-  thead { background: #f8f9fa; }
-  th {
+  .print-table { width: 100%; border-collapse: collapse; font-size: 9px; }
+  .print-table th {
+    background: #111;
+    color: #fff;
+    padding: 5px 7px;
     text-align: left;
-    padding: 12px 16px;
-    font-size: 11px;
+    font-size: 8px;
     text-transform: uppercase;
-    letter-spacing: 0.5px;
-    color: #888;
-    font-weight: 600;
-    border-bottom: 1px solid #e8e8e8;
+    letter-spacing: .5px;
   }
-  td { padding: 13px 16px; border-bottom: 1px solid #f0f0f0; vertical-align: middle; }
-  tr:last-child td { border-bottom: none; }
-  tr:hover td { background: #fafafa; }
-
-  .badge {
-    display: inline-block;
-    padding: 3px 10px;
-    border-radius: 20px;
-    font-size: 11px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.3px;
+  .print-table td { padding: 5px 7px; border-bottom: 1px solid #e5e7eb; }
+  .print-table tr:nth-child(even) td { background: #f9fafb; }
+  .print-zone-header td {
+    background: #1e2330 !important;
+    color: #fff;
+    font-weight: 700;
+    font-size: 10px;
+    padding: 6px 7px;
   }
-  .badge.new      { background: #dcfce7; color: #16a34a; }
-  .badge.pending  { background: #fef9c3; color: #ca8a04; }
-  .badge.done     { background: #e0e7ff; color: #4338ca; }
+  .print-total { margin-top: 10px; text-align: right; font-weight: 700; font-size: 11px; }
 
-  .dispatcher-tag {
-    display: inline-block;
-    padding: 3px 10px;
-    background: #f0f4ff;
-    color: #3b4fc8;
-    border-radius: 20px;
-    font-size: 12px;
-    font-weight: 500;
+  /* ── SLIPS PRINT ── */
+  .slips-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
   }
-
-  .empty {
+  .slip {
+    border: 1.5px solid #000;
+    border-radius: 6px;
+    padding: 10px;
+    page-break-inside: avoid;
+    font-size: 9px;
+    background: #fff;
+  }
+  .slip-num {
+    font-size: 22px;
+    font-weight: 900;
     text-align: center;
-    padding: 60px 20px;
-    color: #aaa;
-    font-size: 14px;
+    border-bottom: 1px solid #ccc;
+    padding-bottom: 4px;
+    margin-bottom: 6px;
   }
-
-  .time { color: #aaa; font-size: 12px; }
-
-  #last-updated { font-size: 12px; color: #aaa; margin-left: 8px; }
+  .slip-zone {
+    background: #111;
+    color: #fff;
+    text-align: center;
+    font-weight: 700;
+    font-size: 9px;
+    padding: 3px;
+    border-radius: 3px;
+    margin-bottom: 6px;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+  }
+  .slip-row { display: flex; justify-content: space-between; margin-bottom: 3px; gap: 6px; }
+  .slip-label { color: #666; white-space: nowrap; }
+  .slip-val { font-weight: 600; text-align: right; }
+  .slip-amount {
+    font-size: 14px;
+    font-weight: 900;
+    margin-top: 6px;
+    border-top: 1px solid #ccc;
+    padding-top: 4px;
+    text-align: center;
+  }
+}
 </style>
 </head>
 <body>
 
 <header>
-  <h1><span class="live-dot"></span>Abuja Ops — Order Dashboard</h1>
-  <span id="last-updated">Loading...</span>
+  <div class="logo">
+    <div class="logo-mark">T</div>
+    <div class="logo-text">Tolly<span>Classic</span> <span style="color:var(--muted);font-weight:400;font-size:12px;">Ops Dashboard</span></div>
+  </div>
+  <div class="header-right">
+    <div class="live-pill"><div class="live-dot"></div>Live</div>
+    <div class="date-display" id="date-display"></div>
+    <button class="btn-print" id="btn-slips" onclick="printSlips()">🖨 Slips</button>
+    <button class="btn-print" id="btn-cat" onclick="printCatalogue()">🖨 Catalogue</button>
+    <button class="btn-print" id="btn-byc" onclick="printByCaptain()">🖨 By Captain</button>
+    <button class="btn-refresh" onclick="showActivityLog()" style="margin-right:4px;">📋 Activity</button>
+    <button class="btn-refresh" onclick="loadOrders()">↻ Refresh</button>
+    <div id="auth-area" style="display:flex;align-items:center;gap:8px;margin-left:4px;">
+      <div id="auth-user" style="display:none;align-items:center;gap:8px;">
+        <img id="auth-avatar" style="width:26px;height:26px;border-radius:50%;border:1px solid var(--border2);" src="" alt=""/>
+        <span id="auth-name" style="font-size:11px;color:var(--muted2);max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
+        <button onclick="signOut()" style="background:var(--border);border:1px solid var(--border2);color:var(--muted2);border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer;">Sign out</button>
+      </div>
+      <button id="btn-signin" onclick="signIn()" style="background:var(--green-bg);border:1px solid var(--green-dim);color:var(--green);border-radius:7px;padding:6px 14px;font-size:12px;cursor:pointer;display:flex;align-items:center;gap:6px;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12.545 10.239v3.821h5.445c-.712 2.315-2.647 3.972-5.445 3.972a6.033 6.033 0 110-12.064c1.498 0 2.866.549 3.921 1.453l2.814-2.814A9.969 9.969 0 0012.545 2C7.021 2 2.543 6.477 2.543 12s4.478 10 10.002 10c8.396 0 10.249-7.85 9.426-11.748l-9.426-.013z"/></svg>
+        Sign in
+      </button>
+    </div>
+  </div>
 </header>
 
-<div class="stats">
-  <div class="stat">
-    <div class="label">Total orders</div>
-    <div class="value" id="stat-total">—</div>
+<div class="main">
+
+  <!-- Stats -->
+  <div class="stats">
+    <div class="stat s-total">
+      <div class="stat-label">Total Orders</div>
+      <div class="stat-value" id="s-total">—</div>
+    </div>
+    <div class="stat s-today">
+      <div class="stat-label">Today</div>
+      <div class="stat-value" id="s-today">—</div>
+    </div>
+    <div class="stat s-pending">
+      <div class="stat-label">Pending</div>
+      <div class="stat-value" id="s-pending">—</div>
+    </div>
+    <div class="stat s-done">
+      <div class="stat-label">Delivered</div>
+      <div class="stat-value" id="s-done">—</div>
+    </div>
+    <div class="stat s-zones">
+      <div class="stat-label">Zones Active</div>
+      <div class="stat-value" id="s-zones">—</div>
+    </div>
+    <div class="stat s-revenue">
+      <div class="stat-label">Today's Value</div>
+      <div class="stat-value" id="s-revenue">—</div>
+    </div>
   </div>
-  <div class="stat green">
-    <div class="label">New today</div>
-    <div class="value" id="stat-today">—</div>
+
+  <!-- Controls -->
+  <div class="controls">
+    <div class="search-wrap">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+      <input type="text" id="search" placeholder="Search customer, product, phone..." oninput="renderTable()"/>
+    </div>
+    <select id="f-zone" onchange="renderTable()">
+      <option value="">All zones</option>
+    </select>
+    <select id="f-status" onchange="renderTable()">
+      <option value="">All statuses</option>
+      <option value="pending">Pending</option>
+      <option value="dispatched">Dispatched</option>
+      <option value="delivered">Delivered</option>
+    </select>
+    <input type="date" id="f-date" onchange="renderTable()"/>
+    <select id="f-captain" onchange="renderTable()">
+      <option value="">All captains</option>
+    </select>
+    <div class="tab-group">
+      <button class="tab-btn active" onclick="switchView('table', this)">Table</button>
+      <button class="tab-btn" onclick="switchView('zone', this)">By Zone</button>
+      <button class="tab-btn" onclick="switchView('captain', this)">Captains</button>
+    </div>
   </div>
-  <div class="stat amber">
-    <div class="label">Dispatchers active</div>
-    <div class="value" id="stat-dispatchers">—</div>
+
+  <!-- Table View -->
+  <div id="view-table">
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Order</th>
+            <th>Partner</th>
+            <th>Customer</th>
+            <th>Phone</th>
+            <th>Product</th>
+            <th>Note</th>
+            <th>Zone</th>
+            <th>Amount</th>
+            <th>Captain</th>
+            <th>Staff</th>
+            <th>Date</th>
+            <th>Status</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody id="table-body">
+          <tr><td colspan="12" class="empty"><div class="empty-icon">📦</div><div class="empty-text">Loading orders...</div></td></tr>
+        </tbody>
+      </table>
+    </div>
   </div>
-  <div class="stat">
-    <div class="label">Products tracked</div>
-    <div class="value" id="stat-products">—</div>
+
+  <!-- Zone View -->
+  <div id="view-zone" style="display:none;">
+    <div class="zone-grid" id="zone-grid"></div>
+  </div>
+
+  <!-- Captain View -->
+  <div id="view-captain" style="display:none;">
+    <div style="margin-bottom:12px;">
+      <div class="search-wrap" style="max-width:300px;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        <input type="text" id="captain-search" placeholder="Search captain name..." oninput="renderCaptainView()"/>
+      </div>
+    </div>
+    <div id="captain-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px;align-items:start;"></div>
+  </div>
+
+</div>
+
+<!-- Activity Log Modal -->
+<div id="activity-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:300;align-items:flex-start;justify-content:center;padding-top:60px;overflow-y:auto;">
+  <div style="background:var(--card);border:1px solid var(--border2);border-radius:14px;width:680px;max-width:95vw;max-height:80vh;display:flex;flex-direction:column;">
+    <div style="padding:18px 24px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-shrink:0;">
+      <div style="font-family:var(--display);font-weight:700;font-size:15px;">📋 Staff Activity Log</div>
+      <div style="display:flex;gap:10px;align-items:center;">
+        <input type="date" id="log-date" style="background:var(--surface);border:1px solid var(--border2);color:var(--text);border-radius:7px;padding:5px 10px;font-size:12px;" onchange="loadActivityLog()"/>
+        <button onclick="closeActivityLog()" style="background:none;border:none;color:var(--muted);font-size:18px;cursor:pointer;">✕</button>
+      </div>
+    </div>
+    <div id="activity-list" style="overflow-y:auto;flex:1;padding:16px 24px;"></div>
   </div>
 </div>
 
-<div class="controls">
-  <input type="text" id="search" placeholder="Search customer, dispatcher, product..." oninput="renderTable()"/>
-  <select id="filter-dispatcher" onchange="renderTable()">
-    <option value="">All dispatchers</option>
-  </select>
-  <select id="filter-status" onchange="renderTable()">
-    <option value="">All statuses</option>
-    <option value="new">New</option>
-    <option value="pending">Pending</option>
-    <option value="done">Done</option>
-  </select>
-  <button class="btn-refresh" onclick="loadOrders()">↻ Refresh</button>
+<!-- Edit Modal -->
+<div id="edit-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:200;align-items:center;justify-content:center;">
+  <div style="background:var(--card);border:1px solid var(--border2);border-radius:14px;padding:24px;width:480px;max-width:90vw;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;">
+      <div style="font-family:var(--display);font-weight:700;font-size:15px;">Edit Order <span id="edit-order-num" style="color:var(--green)"></span></div>
+      <button onclick="closeEdit()" style="background:none;border:none;color:var(--muted);font-size:18px;cursor:pointer;">✕</button>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;" id="edit-fields"></div>
+    <div style="display:flex;gap:10px;margin-top:18px;justify-content:flex-end;">
+      <button onclick="closeEdit()" style="background:var(--border);border:1px solid var(--border2);color:var(--muted2);border-radius:8px;padding:8px 18px;font-family:var(--body);font-size:12px;cursor:pointer;">Cancel</button>
+      <button onclick="saveEdit()" style="background:var(--green-dim);border:1px solid var(--green-dim);color:#fff;border-radius:8px;padding:8px 18px;font-family:var(--body);font-size:12px;cursor:pointer;font-weight:600;">Save Changes</button>
+    </div>
+  </div>
 </div>
 
-<div class="table-wrap">
-  <table>
-    <thead>
-      <tr>
-        <th>#</th>
-        <th>Time</th>
-        <th>Dispatcher</th>
-        <th>Product</th>
-        <th>Customer</th>
-        <th>Phone</th>
-        <th>Qty</th>
-        <th>Address</th>
-        <th>Status</th>
-      </tr>
-    </thead>
-    <tbody id="orders-body">
-      <tr><td colspan="9" class="empty">Loading orders...</td></tr>
-    </tbody>
-  </table>
-</div>
+<!-- Hidden print area -->
+<div id="print-area" style="display:none;"></div>
+
+<div class="toast" id="toast"></div>
 
 <script>
-const SUPABASE_URL = 'https://cnibkphbjautasggyiia.supabase.co';
-const SUPABASE_KEY = 'sb_publishable_mUKU80NAIYmS1Gk-S22nAQ_JMZNp1BJ';
+let SUPABASE_URL = '';
+let SUPABASE_KEY = '';
+
+// Fetch config from server — no hardcoded keys in frontend
+async function loadConfig() {
+  try {
+    const r = await fetch('/config');
+    if (!r.ok) throw new Error('no server');
+    const cfg = await r.json();
+    SUPABASE_URL = cfg.supabaseUrl;
+    SUPABASE_KEY = cfg.supabaseKey;
+    // Only merge server emails if they exist and we're on Express
+    if (cfg.opsEmails?.length) {
+      cfg.opsEmails.forEach(e => {
+        if (!OPS_EMAILS.includes(e.toLowerCase())) OPS_EMAILS.push(e.toLowerCase());
+      });
+    }
+  } catch(e) {
+    // Static hosting (Netlify) — use hardcoded values above
+    SUPABASE_URL = 'https://cnibkphbjautasggyiia.supabase.co';
+    SUPABASE_KEY = 'sb_publishable_mUKU80NAIYmS1Gk-S22nAQ_JMZNp1BJ';
+  }
+}
 
 let allOrders = [];
+let currentView = 'table';
+
+// Set date display and default filter
+const now = new Date();
+document.getElementById('date-display').textContent =
+  now.toLocaleDateString('en-NG', { weekday:'short', day:'numeric', month:'short', year:'numeric' });
+
+// Set default date filter to today in YYYY-MM-DD format
+const todayISO = new Date(Date.now() + 60*60*1000).toISOString().split('T')[0]; // WAT
+document.getElementById('f-date').value = todayISO;
+
+async function api(path) {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+    headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` }
+  });
+  return r.json();
+}
+
+async function patch(id, data) {
+  if (!canWrite) { showToast('🔒 Sign in with an authorised account to make changes'); return; }
+  await fetch(`${SUPABASE_URL}/rest/v1/orders?id=eq.${id}`, {
+    method: 'PATCH',
+    headers: {
+      'apikey': SUPABASE_KEY,
+      'Authorization': `Bearer ${SUPABASE_KEY}`,
+      'Content-Type': 'application/json',
+      'Prefer': 'return=minimal'
+    },
+    body: JSON.stringify(data)
+  });
+}
 
 async function loadOrders() {
   try {
-    const res = await fetch(
-      `${SUPABASE_URL}/rest/v1/orders?select=*&order=created_at.desc&limit=200`,
-      { headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` } }
-    );
-    allOrders = await res.json();
+    const data = await api('orders?select=id,order_number,raw_text,partner_name,customer_name,customer_phone1,customer_phone2,product,amount,raw_address,zone,verified,status,payment_method,report,order_date,created_at,closer_name,closer_phone,dispatcher_name,updated_by&order=created_at.desc&limit=500');
+    allOrders = Array.isArray(data) ? data : [];
     updateStats();
     populateFilters();
+    populateCaptainFilter();
     renderTable();
-    document.getElementById('last-updated').textContent =
-      'Updated ' + new Date().toLocaleTimeString('en-NG', { hour: '2-digit', minute: '2-digit' });
+    document.getElementById('date-display').textContent =
+      now.toLocaleDateString('en-NG', { weekday:'short', day:'numeric', month:'short', year:'numeric' }) +
+      '  ·  Updated ' + new Date().toLocaleTimeString('en-NG', { hour:'2-digit', minute:'2-digit' });
   } catch(e) {
-    document.getElementById('orders-body').innerHTML =
-      `<tr><td colspan="9" class="empty">⚠️ Could not load orders. Check Supabase connection.</td></tr>`;
+    showToast('⚠️ Could not load orders');
   }
 }
 
 function updateStats() {
-  const today = new Date().toDateString();
-  const todayOrders = allOrders.filter(o => new Date(o.created_at).toDateString() === today);
-  const dispatchers = new Set(allOrders.map(o => o.dispatcher_name)).size;
-  const products    = new Set(allOrders.map(o => o.product)).size;
+  const todayStr = new Date(Date.now() + 60*60*1000).toISOString().split('T')[0]; // WAT
+  const todayOrders = allOrders.filter(o => (o.order_date || o.created_at?.split('T')[0]) === todayStr);
+  const pending   = todayOrders.filter(o => o.status === 'pending' || !o.status).length;
+  const delivered = todayOrders.filter(o => o.status === 'delivered').length;
+  const zones     = new Set(todayOrders.map(o => o.zone).filter(Boolean)).size;
+  const revenue   = todayOrders.reduce((s, o) => s + (Number(o.amount) || 0), 0);
 
-  document.getElementById('stat-total').textContent       = allOrders.length;
-  document.getElementById('stat-today').textContent       = todayOrders.length;
-  document.getElementById('stat-dispatchers').textContent = dispatchers;
-  document.getElementById('stat-products').textContent    = products;
+  document.getElementById('s-total').textContent   = allOrders.length;
+  document.getElementById('s-today').textContent   = todayOrders.length;
+  document.getElementById('s-pending').textContent = pending;
+  document.getElementById('s-done').textContent    = delivered;
+  document.getElementById('s-zones').textContent   = zones;
+  document.getElementById('s-revenue').textContent = revenue >= 1000000
+    ? '₦' + (revenue/1000000).toFixed(1) + 'M'
+    : '₦' + (revenue/1000).toFixed(0) + 'k';
 }
 
 function populateFilters() {
-  const sel = document.getElementById('filter-dispatcher');
-  const current = sel.value;
-  const dispatchers = [...new Set(allOrders.map(o => o.dispatcher_name).filter(Boolean))].sort();
-  sel.innerHTML = '<option value="">All dispatchers</option>' +
-    dispatchers.map(d => `<option value="${d}" ${d===current?'selected':''}>${d}</option>`).join('');
+  const sel = document.getElementById('f-zone');
+  const cur = sel.value;
+  const zones = [...new Set(allOrders.map(o => o.zone).filter(Boolean))].sort();
+  sel.innerHTML = '<option value="">All zones</option>' +
+    zones.map(z => `<option value="${z}" ${z===cur?'selected':''}>${z}</option>`).join('');
+}
+
+function filtered() {
+  const search  = document.getElementById('search').value.toLowerCase();
+  const zone    = document.getElementById('f-zone').value;
+  const status  = document.getElementById('f-status').value;
+  const date    = document.getElementById('f-date').value;
+
+  return allOrders.filter(o => {
+    if (date) {
+      const oDate = o.order_date || o.created_at?.split('T')[0];
+      if (oDate !== date) return false;
+    }
+    const captain = document.getElementById('f-captain').value;
+    if (captain && o.dispatcher_name !== captain) return false;
+    if (zone   && o.zone !== zone) return false;
+    if (status && (o.status || 'pending') !== status) return false;
+    if (search) {
+      const hay = [o.customer_name, o.product, o.customer_phone1,
+                   o.partner_name, o.zone, o.order_number].join(' ').toLowerCase();
+      if (!hay.includes(search)) return false;
+    }
+    return true;
+  });
 }
 
 function renderTable() {
-  const search   = document.getElementById('search').value.toLowerCase();
-  const dispFilter = document.getElementById('filter-dispatcher').value;
-  const statusFilter = document.getElementById('filter-status').value;
+  if (currentView === 'zone') return renderZone();
+  const rows = filtered();
+  const tbody = document.getElementById('table-body');
 
-  const filtered = allOrders.filter(o => {
-    const matchSearch = !search ||
-      (o.dispatcher_name||'').toLowerCase().includes(search) ||
-      (o.customer_name||'').toLowerCase().includes(search) ||
-      (o.product||'').toLowerCase().includes(search) ||
-      (o.customer_phone||'').includes(search);
-    const matchDisp   = !dispFilter   || o.dispatcher_name === dispFilter;
-    const matchStatus = !statusFilter || o.status === statusFilter;
-    return matchSearch && matchDisp && matchStatus;
-  });
-
-  if (!filtered.length) {
-    document.getElementById('orders-body').innerHTML =
-      `<tr><td colspan="9" class="empty">No orders found</td></tr>`;
+  if (!rows.length) {
+    tbody.innerHTML = `<tr><td colspan="14" class="empty">
+      <div class="empty-icon">📦</div>
+      <div class="empty-text">No orders found</div>
+    </td></tr>`;
     return;
   }
 
-  document.getElementById('orders-body').innerHTML = filtered.map((o, i) => {
+  const RO = !canWrite ? 'disabled style="opacity:0.35;pointer-events:none;"' : '';
+
+  tbody.innerHTML = rows.map((o, i) => {
+    const status = o.status || 'pending';
+    const captainLocked = status === 'dispatched' || status === 'delivered';
+    const tc = o.payment_method || '';
     const time = new Date(o.created_at).toLocaleString('en-NG', {
       month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'
     });
-    const badge = `<span class="badge ${o.status||'new'}">${o.status||'new'}</span>`;
-    const disp  = `<span class="dispatcher-tag">${o.dispatcher_name||'—'}</span>`;
+    const isOutside = ['KEFFI','SULEJA','MADALA'].includes(o.zone);
+    const captainOpts = allCaptains.map(c =>
+      `<option value="${c}" ${o.dispatcher_name===c?'selected':''}>${c}</option>`
+    ).join('');
+    const partnerOpts = allPartners.map(p =>
+      `<option value="${p}" ${o.partner_name===p?'selected':''}>${p}</option>`
+    ).join('');
+
     return `<tr>
-      <td class="time">${o.id||i+1}</td>
-      <td class="time">${time}</td>
-      <td>${disp}</td>
-      <td><strong>${o.product||'—'}</strong></td>
-      <td>${o.customer_name||'—'}</td>
-      <td class="time">${o.customer_phone||'—'}</td>
-      <td style="text-align:center">${o.quantity||1}</td>
-      <td class="time">${o.address||'—'}</td>
-      <td>${badge}</td>
+      <td class="cell-num">${i+1}</td>
+      <td class="cell-order">#${o.order_number || '—'}</td>
+      <td>
+        <select class="tc-select" onchange="assignPartner(${o.id}, this)" ${RO} style="min-width:80px;max-width:120px;font-size:10px;${!canWrite?'opacity:0.35;pointer-events:none;':''}">
+          <option value="">—</option>
+          ${partnerOpts}
+        </select>
+      </td>
+      <td class="cell-customer">${o.customer_name || 'Unknown'}</td>
+      <td class="cell-phone">${o.customer_phone1 || '—'}${o.customer_phone2 ? '<br>'+o.customer_phone2 : ''}</td>
+      <td class="cell-product" title="${o.product||''}">${o.product || '—'}</td>
+      <td style="min-width:120px;max-width:140px;">
+        <div class="cell-note" contenteditable="true"
+          title="${o.report||''}"
+          style="min-height:18px;outline:none;padding:2px 4px;border-radius:4px;border:1px solid transparent;"
+          onfocus="this.style.borderColor='var(--border2)';this.style.whiteSpace='normal';this.style.overflow='visible';this.style.maxWidth='none';"
+          onblur="saveNote(${o.id}, this);this.style.whiteSpace='nowrap';this.style.overflow='hidden';this.style.maxWidth='120px';"
+          >${o.report || ''}</div>
+      </td>
+      <td><span class="zone-tag ${isOutside?'outside':''}">${o.zone || '—'}</span></td>
+      <td class="cell-amount">${o.amount ? '₦'+Number(o.amount).toLocaleString() : '—'}</td>
+      <td>
+        <select class="tc-select" onchange="assignCaptain(${o.id}, this)"
+          ${!canWrite || captainLocked ? 'disabled' : ''}
+          style="min-width:90px;max-width:130px;${!canWrite || captainLocked ? 'opacity:0.5;pointer-events:none;' : ''}">
+          <option value="">— assign</option>
+          ${captainOpts}
+        </select>
+        ${captainLocked && o.dispatcher_name ? `<div style="font-size:9px;color:var(--muted);margin-top:2px;font-family:var(--mono)">🔒 locked</div>` : ''}
+      </td>
+      <td style="font-size:10px;color:var(--muted2);font-family:var(--mono);white-space:nowrap;">
+        ${o.updated_by ? `<span title="${o.updated_by}">${o.updated_by.split(' ')[0]}</span>` : '—'}
+      </td>
+      <td class="cell-date">${time}</td>
+      <td><span class="badge badge-${status}">${status}</span></td>
+      <td>
+        ${canWrite ? (status === 'pending'
+          ? `<button class="action-btn" onclick="updateStatus(${o.id}, 'dispatched')">Dispatch</button>`
+          : status === 'dispatched'
+          ? `<button class="action-btn deliver" onclick="updateStatus(${o.id}, 'delivered')">Deliver</button>`
+          : `<span style="color:var(--muted);font-size:10px;font-family:var(--mono)">done</span>`)
+          : `<span style="color:var(--muted);font-size:10px;font-family:var(--mono);opacity:0.35;">—</span>`
+        }
+        ${canWrite ? `<button class="action-btn" style="margin-top:4px" onclick="openEdit(${o.id})">✏️</button>` : ''}
+      </td>
     </tr>`;
   }).join('');
 }
 
-// Auto-refresh every 30 seconds
-loadOrders();
-setInterval(loadOrders, 30000);
+function renderZone() {
+  const rows = filtered();
+  const grid = document.getElementById('zone-grid');
+
+  if (!rows.length) {
+    grid.innerHTML = `<div class="empty" style="grid-column:1/-1">
+      <div class="empty-icon">📦</div><div class="empty-text">No orders found</div>
+    </div>`;
+    return;
+  }
+
+  const byZone = {};
+  for (const o of rows) {
+    const z = o.zone || 'UNASSIGNED';
+    if (!byZone[z]) byZone[z] = [];
+    byZone[z].push(o);
+  }
+
+  grid.innerHTML = Object.entries(byZone)
+    .sort((a,b) => b[1].length - a[1].length)
+    .map(([zone, orders]) => `
+      <div class="zone-card">
+        <div class="zone-header">
+          <div class="zone-name">${zone}</div>
+          <div class="zone-count">${orders.length} order${orders.length>1?'s':''}</div>
+        </div>
+        ${orders.map(o => `
+          <div class="zone-order">
+            <div class="zone-order-info">
+              <div class="zone-order-num">#${o.order_number} · ${o.partner_name || 'unknown partner'}</div>
+              <div class="zone-order-name">${o.customer_name || 'Unknown'}</div>
+              <div class="zone-order-product">${o.product || '—'}</div>
+            </div>
+            <div>
+              <div class="zone-order-amount">₦${Number(o.amount||0).toLocaleString()}</div>
+              <div style="text-align:right;margin-top:4px">
+                <span class="badge badge-${o.status||'pending'}">${o.status||'pending'}</span>
+              </div>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    `).join('');
+}
+
+async function saveNote(id, el) {
+  el.style.borderColor = 'transparent';
+  const note = el.innerText.trim();
+  await patch(id, { report: note || null });
+  const o = allOrders.find(x => x.id === id);
+  if (o) o.report = note;
+  showToast('📝 Note saved');
+}
+
+async function updateStatus(id, status) {
+  const staffName = currentUser?.user_metadata?.full_name || currentUser?.email || 'Unknown';
+  await patch(id, { status, updated_by: staffName });
+  const o = allOrders.find(x => x.id === id);
+  if (o) {
+    o.status = status;
+    o.updated_by = staffName;
+    logActivity(`Order ${status}`, `#${o.order_number} ${o.customer_name} — ${o.zone}`, id);
+  }
+  renderTable();
+  showToast(`✅ Order marked as ${status}`);
+}
+
+async function updateTC(id, sel) {
+  const val = sel.value;
+  sel.className = `tc-select ${val==='T'?'transfer':val==='C'?'cash':''}`;
+  await patch(id, { payment_method: val || null });
+  const o = allOrders.find(x => x.id === id);
+  if (o) o.payment_method = val;
+  showToast(`💳 Payment method updated`);
+}
+
+function switchView(view, btn) {
+  currentView = view;
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('view-table').style.display   = view === 'table'   ? 'block' : 'none';
+  document.getElementById('view-zone').style.display    = view === 'zone'    ? 'block' : 'none';
+  document.getElementById('view-captain').style.display = view === 'captain' ? 'block' : 'none';
+  if (view === 'captain') renderCaptainView();
+  else renderTable();
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+function getDateLabel() {
+  const d = new Date(Date.now() + 60*60*1000);
+  return d.toLocaleDateString('en-NG', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
+}
+
+function printCatalogue() {
+  const rows = filtered();
+  if (!rows.length) { showToast('No orders to print'); return; }
+
+  // Group by zone
+  const byZone = {};
+  for (const o of rows) {
+    const z = o.zone || 'UNASSIGNED';
+    if (!byZone[z]) byZone[z] = [];
+    byZone[z].push(o);
+  }
+
+  const total = rows.reduce((s, o) => s + (Number(o.amount)||0), 0);
+  const cash = rows.filter(o => o.payment_method === 'C').length;
+  const transfer = rows.filter(o => o.payment_method === 'T').length;
+
+  let html = `
+    <div class="print-header">
+      <div>
+        <div class="print-title">TCD — Daily Order Catalogue</div>
+        <div style="font-size:11px;color:#555;margin-top:2px;">${getDateLabel()}</div>
+      </div>
+      <div class="print-meta">
+        ${rows.length} orders &nbsp;·&nbsp; ₦${total.toLocaleString()}<br>
+        Transfer: ${transfer} &nbsp;·&nbsp; Cash: ${cash} &nbsp;·&nbsp; Pending T/C: ${rows.length - cash - transfer}
+      </div>
+    </div>
+        <table class="print-table">
+      <thead>
+        <tr>
+          <th style="width:30px">No</th>
+          <th style="width:30px">SN</th>
+          <th style="width:80px">Note</th>
+          <th style="width:90px">Seller</th>
+          <th>Customer</th>
+          <th style="width:90px">Phone</th>
+          <th>Products</th>
+          <th style="width:80px">Location</th>
+          <th style="width:80px">Captain</th>
+          <th style="width:25px">T/C</th>
+          <th style="width:60px">Amount</th>
+        </tr>
+      </thead>
+      <tbody>`;
+
+  let sn = 1;
+  for (const [zone, zoneOrders] of Object.entries(byZone).sort()) {
+    for (const o of zoneOrders) {
+      html += `<tr>
+        <td style="color:#888">#${o.order_number||'—'}</td>
+        <td style="text-align:center">${sn++}</td>
+        <td style="color:#555;font-style:italic">${o.report||''}</td>
+        <td>${o.partner_name||'—'}</td>
+        <td><strong>${o.customer_name||'Unknown'}</strong></td>
+        <td style="font-family:monospace">${o.customer_phone1||'—'}${o.customer_phone2?'<br>'+o.customer_phone2:''}</td>
+        <td>${o.product||'—'}</td>
+        <td>${o.zone||'—'}</td>
+        <td style="font-weight:600;color:#1a1a1a">${o.dispatcher_name||'—'}</td>
+        <td style="text-align:center">${o.payment_method||'—'}</td>
+        <td style="text-align:right;font-weight:700">₦${Number(o.amount||0).toLocaleString()}</td>
+      </tr>`;
+    }
+  }
+
+  html += `</tbody></table>
+    <div class="print-total">
+      Total: ${rows.length} orders &nbsp;·&nbsp; ₦${total.toLocaleString()}
+    </div>`;
+
+  document.getElementById('print-area').innerHTML = html;
+  window.print();
+  showToast('🖨 Printing catalogue...');
+}
+
+function printSlips() {
+  const rows = filtered();
+  if (!rows.length) { showToast('No orders to print'); return; }
+
+  // Sort by zone for logical grouping
+  const sorted = [...rows].sort((a,b) => (a.zone||'').localeCompare(b.zone||''));
+
+  let html = `
+    <div class="print-header">
+      <div class="print-title">TCD — Dispatch Slips</div>
+      <div class="print-meta">${getDateLabel()} &nbsp;·&nbsp; ${rows.length} slips</div>
+    </div>
+    <div class="slips-grid">`;
+
+  for (const o of sorted) {
+    html += `
+      <div class="slip">
+        <div class="slip-num">#${o.order_number||'—'}</div>
+        <div class="slip-zone">${o.zone||'UNASSIGNED'}</div>
+        <div class="slip-row">
+          <span class="slip-label">Name</span>
+          <span class="slip-val">${o.customer_name||'Unknown'}</span>
+        </div>
+        <div class="slip-row">
+          <span class="slip-label">Phone</span>
+          <span class="slip-val">${o.customer_phone1||'—'}</span>
+        </div>
+        ${o.customer_phone2 ? `<div class="slip-row"><span class="slip-label">Alt</span><span class="slip-val">${o.customer_phone2}</span></div>` : ''}
+        <div class="slip-row">
+          <span class="slip-label">Product</span>
+          <span class="slip-val">${o.product||'—'}</span>
+        </div>
+        ${o.partner_name ? `<div class="slip-row"><span class="slip-label">Partner</span><span class="slip-val">${o.partner_name}</span></div>` : ''}
+        ${o.closer_name ? `<div class="slip-row"><span class="slip-label">Closer</span><span class="slip-val">${o.closer_name}</span></div>` : ''}
+        <div class="slip-amount">₦${Number(o.amount||0).toLocaleString()}</div>
+      </div>`;
+  }
+
+  html += `</div>`;
+  document.getElementById('print-area').innerHTML = html;
+  window.print();
+  showToast('🖨 Printing slips...');
+}
+
+let allPartners = [];
+
+async function loadCaptains() {
+  try {
+    const data = await api('dispatchers?select=name&order=name');
+    allCaptains = Array.isArray(data) ? data.map(d => d.name) : [];
+  } catch(e) { console.error('Could not load captains', e); }
+}
+
+async function loadPartners() {
+  try {
+    const data = await api('partners?select=name&order=name');
+    allPartners = Array.isArray(data) ? data.map(d => d.name) : [];
+  } catch(e) { console.error('Could not load partners', e); }
+}
+
+async function assignPartner(id, sel) {
+  const name = sel.value;
+  await patch(id, { partner_name: name || null });
+  const o = allOrders.find(x => x.id === id);
+  if (o) o.partner_name = name;
+  showToast(`🏪 Partner assigned: ${name || 'cleared'}`);
+}
+
+function renderCaptainView() {
+  const rows = filtered();
+  const grid = document.getElementById('captain-grid');
+  const captainSearch = (document.getElementById('captain-search')?.value || '').toLowerCase();
+
+  const byCaptain = { 'UNASSIGNED': [] };
+  for (const o of rows) {
+    const c = o.dispatcher_name || 'UNASSIGNED';
+    if (!byCaptain[c]) byCaptain[c] = [];
+    byCaptain[c].push(o);
+  }
+
+  if (!rows.length) {
+    grid.innerHTML = `<div class="empty" style="grid-column:1/-1"><div class="empty-icon">🚴</div><div class="empty-text">No orders found</div></div>`;
+    return;
+  }
+
+  const entries = Object.entries(byCaptain)
+    .filter(([,orders]) => orders.length > 0)
+    .filter(([captain]) => !captainSearch || captain.toLowerCase().includes(captainSearch))
+    .sort((a,b) => a[0] === 'UNASSIGNED' ? 1 : a[0].localeCompare(b[0]));
+  if (!entries.length) {
+    grid.innerHTML = `<div class="empty" style="grid-column:1/-1"><div class="empty-icon">🚴</div><div class="empty-text">No captains match "${captainSearch}"</div></div>`;
+    return;
+  }
+
+  grid.innerHTML = entries.map(([captain, orders]) => {
+      const total = orders.reduce((s,o) => s + (Number(o.amount)||0), 0);
+      const captainId = captain.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g,'');
+      const captainOpts = allCaptains.map(c =>
+        `<option value="${c}">${c}</option>`
+      ).join('');
+
+      const delivered = orders.filter(o => o.status === 'delivered').length;
+      const pending   = orders.filter(o => o.status === 'pending').length;
+      const dispatched = orders.filter(o => o.status === 'dispatched').length;
+
+      return `
+        <div class="zone-card">
+          <div class="zone-header" style="cursor:pointer;" onclick="toggleCaptainCard('${captainId}')">
+            <div>
+              <div class="zone-name" style="display:flex;align-items:center;gap:8px;">
+                ${captain === 'UNASSIGNED'
+                  ? `<span style="color:var(--amber)">⚠️ Unassigned</span>`
+                  : `<span>🚴 ${captain}</span>`}
+              </div>
+              <div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:4px;display:flex;gap:10px;">
+                <span style="color:var(--green)">✅ ${delivered} done</span>
+                <span style="color:var(--blue)">🚚 ${dispatched} out</span>
+                <span style="color:var(--amber)">⏳ ${pending} pending</span>
+                <span>₦${total.toLocaleString()}</span>
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <div class="zone-count">${orders.length}</div>
+              <span id="chevron-${captainId}" style="color:var(--muted);font-size:12px;transition:transform .2s;">▼</span>
+            </div>
+          </div>
+          <div id="captain-body-${captainId}" style="display:none;">
+            ${orders.map(o => `
+              <div class="zone-order" style="flex-direction:column;align-items:flex-start;gap:6px;">
+                <div style="display:flex;justify-content:space-between;width:100%;align-items:center;">
+                  <div>
+                    <div class="zone-order-num">#${o.order_number} · <span style="color:var(--blue)">${o.zone||'—'}</span></div>
+                    <div class="zone-order-name">${o.customer_name||'Unknown'}</div>
+                    <div class="zone-order-product">${o.product||'—'}</div>
+                  </div>
+                  <div style="text-align:right;">
+                    <div class="zone-order-amount">₦${Number(o.amount||0).toLocaleString()}</div>
+                    <span class="badge badge-${o.status||'pending'}" style="margin-top:4px;display:inline-flex;">${o.status||'pending'}</span>
+                  </div>
+                </div>
+                <div style="display:flex;gap:6px;width:100%;">
+                  ${(o.status === 'dispatched' || o.status === 'delivered')
+                    ? `<div style="font-size:10px;color:var(--muted);font-family:var(--mono);padding:4px 0;">🔒 ${o.status}</div>`
+                    : `<select class="tc-select" style="flex:1;font-size:10px;"
+                        onchange="assignCaptain(${o.id}, this)">
+                        <option value="">— assign captain</option>
+                        ${captainOpts.replace(`value="${o.dispatcher_name}"`, `value="${o.dispatcher_name}" selected`)}
+                      </select>
+                      ${o.dispatcher_name
+                        ? `<button class="action-btn" style="font-size:10px;color:var(--red);"
+                             onclick="unassignCaptain(${o.id})">✕ Remove</button>`
+                        : ''}`
+                  }
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        </div>`;
+    }).join('');
+}
+
+function toggleCaptainCard(captainId) {
+  const body = document.getElementById(`captain-body-${captainId}`);
+  const chevron = document.getElementById(`chevron-${captainId}`);
+  const isOpen = body.style.display !== 'none';
+  body.style.display = isOpen ? 'none' : 'block';
+  chevron.style.transform = isOpen ? '' : 'rotate(180deg)';
+}
+
+async function unassignCaptain(id) {
+  await patch(id, { dispatcher_name: null });
+  const o = allOrders.find(x => x.id === id);
+  if (o) o.dispatcher_name = null;
+  populateCaptainFilter();
+  renderCaptainView();
+  showToast('Captain removed');
+}
+
+async function assignCaptain(id, sel) {
+  const o = allOrders.find(x => x.id === id);
+
+  // Lock — can't reassign once dispatched or delivered
+  if (o && (o.status === 'dispatched' || o.status === 'delivered')) {
+    showToast(`🔒 Order is ${o.status} — captain cannot be changed`);
+    // Reset the dropdown to current value
+    sel.value = o.dispatcher_name || '';
+    return;
+  }
+
+  const name = sel.value;
+  const staffName = currentUser?.user_metadata?.full_name || currentUser?.email || 'Unknown';
+  await patch(id, { dispatcher_name: name || null, updated_by: staffName });
+  if (o) {
+    o.dispatcher_name = name;
+    o.updated_by = staffName;
+    logActivity('Captain assigned', `#${o.order_number} ${o.customer_name} → ${name || 'unassigned'}`, id);
+  }
+  populateCaptainFilter();
+  renderTable();
+  showToast(`🚴 Captain assigned: ${name || 'cleared'}`);
+}
+
+function populateCaptainFilter() {
+  const sel = document.getElementById('f-captain');
+  const cur = sel.value;
+  const used = [...new Set(allOrders.map(o => o.dispatcher_name).filter(Boolean))].sort();
+  sel.innerHTML = '<option value="">All captains</option>' +
+    used.map(c => `<option value="${c}" ${c===cur?'selected':''}>${c}</option>`).join('');
+}
+
+function printByCaptain() {
+  const rows = filtered();
+  const today = getDateLabel();
+
+  // Group by captain — skip unassigned
+  const byCaptain = {};
+  for (const o of rows) {
+    const c = o.dispatcher_name;
+    if (!c) continue; // skip unassigned
+    if (!byCaptain[c]) byCaptain[c] = [];
+    byCaptain[c].push(o);
+  }
+
+  const unassigned = rows.filter(o => !o.dispatcher_name);
+
+  if (!Object.keys(byCaptain).length && !unassigned.length) {
+    showToast('No orders to print'); return;
+  }
+
+  let html = '';
+
+  // Print one catalogue page per captain
+  for (const [captain, orders] of Object.entries(byCaptain).sort()) {
+    const total = orders.reduce((s, o) => s + (Number(o.amount)||0), 0);
+    const cash = orders.filter(o => o.payment_method === 'C').length;
+    const transfer = orders.filter(o => o.payment_method === 'T').length;
+
+    html += `
+      <div style="page-break-after:always;">
+        <div class="print-header">
+          <div>
+            <div class="print-title">TCD — Daily Order Catalogue</div>
+            <div style="font-size:11px;color:#555;margin-top:2px;">
+              🚴 <strong>${captain}</strong> &nbsp;·&nbsp; ${today}
+            </div>
+          </div>
+          <div class="print-meta">
+            ${orders.length} orders &nbsp;·&nbsp; ₦${total.toLocaleString()}<br>
+            Transfer: ${transfer} &nbsp;·&nbsp; Cash: ${cash} &nbsp;·&nbsp; Pending T/C: ${orders.length - cash - transfer}
+          </div>
+        </div>
+        <table class="print-table">
+          <thead>
+            <tr>
+              <th style="width:30px">No</th>
+              <th style="width:25px">SN</th>
+              <th style="width:70px">Note</th>
+              <th style="width:85px">Seller</th>
+              <th>Customer</th>
+              <th style="width:85px">Phone</th>
+              <th>Products</th>
+              <th style="width:75px">Location</th>
+              <th style="width:25px">T/C</th>
+              <th style="width:55px">Amount</th>
+            </tr>
+          </thead>
+          <tbody>`;
+
+    let sn = 1;
+    for (const o of orders.sort((a,b) => (a.zone||'').localeCompare(b.zone||''))) {
+      html += `<tr>
+        <td style="color:#888">#${o.order_number||'—'}</td>
+        <td style="text-align:center">${sn++}</td>
+        <td style="color:#555;font-style:italic">${o.report||''}</td>
+        <td>${o.partner_name||'—'}</td>
+        <td><strong>${o.customer_name||'Unknown'}</strong></td>
+        <td style="font-family:monospace;font-size:8px">${o.customer_phone1||'—'}${o.customer_phone2?'<br>'+o.customer_phone2:''}</td>
+        <td>${o.product||'—'}</td>
+        <td>${o.zone||'—'}</td>
+        <td style="text-align:center">${o.payment_method||'—'}</td>
+        <td style="text-align:right;font-weight:700">₦${Number(o.amount||0).toLocaleString()}</td>
+      </tr>`;
+    }
+
+    html += `</tbody></table>
+      <div class="print-total">
+        ${captain} · ${orders.length} orders &nbsp;·&nbsp; ₦${total.toLocaleString()}
+      </div>
+    </div>`;
+  }
+
+  // Last page: unassigned orders (if any)
+  if (unassigned.length) {
+    const total = unassigned.reduce((s, o) => s + (Number(o.amount)||0), 0);
+    html += `
+      <div>
+        <div class="print-header">
+          <div>
+            <div class="print-title" style="color:#e67e22;">⚠️ Unassigned Orders</div>
+            <div style="font-size:11px;color:#555;margin-top:2px;">${today}</div>
+          </div>
+          <div class="print-meta">${unassigned.length} orders &nbsp;·&nbsp; ₦${total.toLocaleString()}</div>
+        </div>
+        <table class="print-table">
+          <thead><tr>
+            <th>No</th><th>SN</th><th>Note</th><th>Seller</th>
+            <th>Customer</th><th>Phone</th><th>Products</th>
+            <th>Location</th><th>T/C</th><th>Amount</th>
+          </tr></thead>
+          <tbody>`;
+    let sn = 1;
+    for (const o of unassigned) {
+      html += `<tr>
+        <td>#${o.order_number||'—'}</td>
+        <td>${sn++}</td>
+        <td style="font-style:italic;color:#555">${o.report||''}</td>
+        <td>${o.partner_name||'—'}</td>
+        <td><strong>${o.customer_name||'Unknown'}</strong></td>
+        <td style="font-size:8px;font-family:monospace">${o.customer_phone1||'—'}</td>
+        <td>${o.product||'—'}</td>
+        <td>${o.zone||'—'}</td>
+        <td>${o.payment_method||'—'}</td>
+        <td style="text-align:right;font-weight:700">₦${Number(o.amount||0).toLocaleString()}</td>
+      </tr>`;
+    }
+    html += `</tbody></table></div>`;
+  }
+
+  document.getElementById('print-area').innerHTML = html;
+  window.print();
+  showToast('🖨 Printing by captain...');
+}
+// ── ACTIVITY LOG ─────────────────────────────────────────────
+async function logActivity(action, detail, orderId = null) {
+  if (!currentUser) return;
+  try {
+    await fetch(`${SUPABASE_URL}/rest/v1/activity_log`, {
+      method: 'POST',
+      headers: {
+        'apikey': SUPABASE_KEY,
+        'Authorization': `Bearer ${SUPABASE_KEY}`,
+        'Content-Type': 'application/json',
+        'Prefer': 'return=minimal'
+      },
+      body: JSON.stringify({
+        staff_email: currentUser.email,
+        staff_name:  currentUser.user_metadata?.full_name || currentUser.email,
+        action,
+        detail,
+        order_id: orderId,
+        created_at: new Date().toISOString()
+      })
+    });
+  } catch(e) { console.warn('Activity log failed:', e); }
+}
+
+async function showActivityLog() {
+  const modal = document.getElementById('activity-modal');
+  modal.style.display = 'flex';
+  const dateEl = document.getElementById('log-date');
+  if (!dateEl.value) {
+    dateEl.value = new Date(Date.now() + 60*60*1000).toISOString().split('T')[0];
+  }
+  await loadActivityLog();
+}
+
+function closeActivityLog() {
+  document.getElementById('activity-modal').style.display = 'none';
+}
+
+async function loadActivityLog() {
+  const date = document.getElementById('log-date').value;
+  const list = document.getElementById('activity-list');
+  list.innerHTML = `<div style="color:var(--muted);font-size:12px;text-align:center;padding:20px;">Loading...</div>`;
+
+  try {
+    const start = `${date}T00:00:00.000Z`;
+    const end   = `${date}T23:59:59.999Z`;
+    const data = await api(`activity_log?created_at=gte.${start}&created_at=lte.${end}&order=created_at.desc&limit=200`);
+
+    if (!Array.isArray(data) || !data.length) {
+      list.innerHTML = `<div style="color:var(--muted);font-size:12px;text-align:center;padding:40px;">No activity recorded for this date</div>`;
+      return;
+    }
+
+    // Group by staff
+    const byStaff = {};
+    for (const entry of data) {
+      const k = entry.staff_name || entry.staff_email;
+      if (!byStaff[k]) byStaff[k] = [];
+      byStaff[k].push(entry);
+    }
+
+    list.innerHTML = Object.entries(byStaff).map(([staff, entries]) => `
+      <div style="margin-bottom:20px;">
+        <div style="font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--green);margin-bottom:8px;display:flex;justify-content:space-between;">
+          <span>👤 ${staff}</span>
+          <span style="color:var(--muted)">${entries.length} action${entries.length>1?'s':''}</span>
+        </div>
+        ${entries.map(e => `
+          <div style="display:flex;gap:12px;padding:7px 0;border-bottom:1px solid var(--border);align-items:flex-start;">
+            <div style="font-family:var(--mono);font-size:10px;color:var(--muted);white-space:nowrap;min-width:50px;">
+              ${new Date(e.created_at).toLocaleTimeString('en-NG',{hour:'2-digit',minute:'2-digit'})}
+            </div>
+            <div>
+              <div style="font-size:11px;font-weight:500;">${e.action}</div>
+              <div style="font-size:11px;color:var(--muted2);">${e.detail||''}</div>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    `).join('');
+  } catch(e) {
+    list.innerHTML = `<div style="color:var(--red);font-size:12px;text-align:center;padding:20px;">Could not load activity log</div>`;
+  }
+}
+
+document.getElementById('activity-modal').addEventListener('click', function(e) {
+  if (e.target === this) closeActivityLog();
+});
+const OPS_EMAILS = [
+  'hi.kodehaus@gmail.com',
+  'dataentry.tcdgo@gmail.com',
+  'fatokiseyi0@gmail.com',
+  // Add more staff emails here as needed
+];
+
+let currentUser = null;
+let canWrite    = false;
+let _supaAuth   = null;
+
+async function initAuth() {
+  if (!window.__supaLoaded) {
+    await new Promise(resolve => {
+      const s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js';
+      s.onload = () => { window.__supaLoaded = true; resolve(); };
+      document.head.appendChild(s);
+    });
+  }
+  _supaAuth = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  const { data: { session } } = await _supaAuth.auth.getSession();
+  if (session?.user) handleAuthUser(session.user);
+  _supaAuth.auth.onAuthStateChange((_e, s) => {
+    if (s?.user) handleAuthUser(s.user);
+    else handleSignOut();
+  });
+}
+
+function handleAuthUser(user) {
+  currentUser = user;
+  canWrite = OPS_EMAILS.map(e=>e.toLowerCase()).includes(user.email?.toLowerCase());
+  document.getElementById('btn-signin').style.display = 'none';
+  const au = document.getElementById('auth-user');
+  au.style.display = 'flex';
+  document.getElementById('auth-name').textContent = user.user_metadata?.full_name || user.email;
+  document.getElementById('auth-avatar').src = user.user_metadata?.avatar_url || '';
+  updateWriteAccess();
+  showToast(canWrite ? `✅ Signed in — write access granted` : `👁️ Signed in — view only`);
+}
+
+function handleSignOut() {
+  currentUser = null; canWrite = false;
+  document.getElementById('btn-signin').style.display = 'flex';
+  document.getElementById('auth-user').style.display = 'none';
+  updateWriteAccess();
+}
+
+function updateWriteAccess() {
+  let banner = document.getElementById('readonly-banner');
+  if (!canWrite) {
+    if (!banner) {
+      banner = document.createElement('div');
+      banner.id = 'readonly-banner';
+      banner.style.cssText = 'background:var(--amber-bg);border-bottom:1px solid rgba(245,158,11,.2);padding:8px 28px;font-size:11px;color:var(--amber);display:flex;align-items:center;gap:8px;';
+      banner.innerHTML = `👁️ &nbsp;<span>View only — sign in with an authorised Google account to make changes</span>`;
+      document.querySelector('header').after(banner);
+    }
+  } else if (banner) banner.remove();
+  // Re-render table so controls reflect auth state
+  renderTable();
+}
+
+async function signIn() {
+  // Always reinit to get fresh client after sign-out
+  _supaAuth = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  await _supaAuth.auth.signInWithOAuth({
+    provider: 'google',
+    options: { redirectTo: window.location.origin + window.location.pathname }
+  });
+}
+
+async function signOut() {
+  await _supaAuth?.auth.signOut();
+  handleSignOut();
+  showToast('👋 Signed out');
+}
+
+// ── EDIT MODAL ────────────────────────────────────────────────
+
+function openEdit(id) {
+  const o = allOrders.find(x => x.id === id);
+  if (!o) return;
+  editingId = id;
+  document.getElementById('edit-order-num').textContent = `#${o.order_number}`;
+
+  const fields = [
+    { key: 'customer_name',   label: 'Customer Name', value: o.customer_name || '' },
+    { key: 'customer_phone1', label: 'Phone 1',        value: o.customer_phone1 || '' },
+    { key: 'customer_phone2', label: 'Phone 2',        value: o.customer_phone2 || '' },
+    { key: 'zone',            label: 'Zone',           value: o.zone || '' },
+    { key: 'product',         label: 'Product',        value: o.product || '', wide: true },
+    { key: 'amount',          label: 'Amount (₦)',     value: o.amount || '' },
+    { key: 'partner_name',    label: 'Partner',        value: o.partner_name || '' },
+    { key: 'closer_name',     label: 'Closer',         value: o.closer_name || '' },
+    { key: 'raw_address',     label: 'Address',        value: o.raw_address || '', wide: true },
+    { key: 'report',          label: 'Notes',          value: o.report || '', wide: true },
+  ];
+
+  document.getElementById('edit-fields').innerHTML = fields.map(f => `
+    <div style="${f.wide ? 'grid-column:1/-1;' : ''}">
+      <div style="font-family:var(--mono);font-size:9px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:5px;">${f.label}</div>
+      <input id="ef-${f.key}" type="${f.key === 'amount' ? 'number' : 'text'}"
+        value="${(String(f.value||'')).replace(/"/g,'&quot;')}"
+        style="width:100%;background:var(--surface);border:1px solid var(--border2);color:var(--text);border-radius:7px;padding:7px 10px;font-family:var(--body);font-size:12px;outline:none;"
+        onfocus="this.style.borderColor='var(--green-dim)'"
+        onblur="this.style.borderColor='var(--border2)'"/>
+    </div>
+  `).join('');
+
+  document.getElementById('edit-modal').style.display = 'flex';
+}
+
+function closeEdit() {
+  document.getElementById('edit-modal').style.display = 'none';
+  editingId = null;
+}
+
+async function saveEdit() {
+  if (!editingId) return;
+  const updates = {
+    customer_name:   document.getElementById('ef-customer_name').value,
+    customer_phone1: document.getElementById('ef-customer_phone1').value,
+    customer_phone2: document.getElementById('ef-customer_phone2').value || null,
+    zone:            document.getElementById('ef-zone').value,
+    product:         document.getElementById('ef-product').value,
+    amount:          Number(document.getElementById('ef-amount').value) || 0,
+    partner_name:    document.getElementById('ef-partner_name').value || null,
+    closer_name:     document.getElementById('ef-closer_name').value || null,
+    raw_address:     document.getElementById('ef-raw_address').value,
+    report:          document.getElementById('ef-report').value || null,
+  };
+
+  await patch(editingId, updates);
+  const o = allOrders.find(x => x.id === editingId);
+  if (o) {
+    logActivity('Order edited', `#${o.order_number} ${o.customer_name}`, editingId);
+    Object.assign(o, updates);
+  }
+  closeEdit();
+  renderTable();
+  showToast('✅ Order updated!');
+}
+
+document.getElementById('edit-modal').addEventListener('click', function(e) {
+  if (e.target === this) closeEdit();
+});
+
+// Boot sequence — load config first, then auth and data
+(async () => {
+  await loadConfig();
+  await initAuth();
+  loadCaptains();
+  loadPartners();
+  loadOrders();
+  setInterval(loadOrders, 30000);
+})();
 </script>
 </body>
 </html>
