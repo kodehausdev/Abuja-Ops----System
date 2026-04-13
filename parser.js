@@ -131,9 +131,12 @@ ZONE RULES (follow exactly):
 - "Wumba", "Apo resettlement" → APO RESETTL
 - Nasarawa state (NOT Mararaba), Keffi → KEFFI — mark is_outside_abuja: true
 - order_number: ALWAYS use the # number at the very TOP of the message. NEVER use CRM reference numbers like "Daggo Group-CRM-ORD-..." or "CSS-2026-..." — those are partner internal IDs.
-- partner_name: the store/brand/agent who submitted the order. Can appear in TWO places: (1) TOP of message before customer details as a code e.g. "VRW-HQ", "KUMBO", "ELA", or (2) BOTTOM of message as a standalone single name on the very last line with no label e.g. "Loveth", "Oluwaferanmi". A bottom partner is a first name or short name appearing alone after all order details are complete. If no clear partner found, leave empty.
-- closer_name: only if explicitly labeled "Closer name:" or "Closer:". Do not confuse with partner name at bottom.
+- product: ALWAYS include quantity in the product field. e.g. "2x Ovella Capsule", "3 Bottles of Baozem Tea", "1 Pack Tummy Trimmer". Never strip the quantity — it is critical for delivery.
+- partner_name: the store/brand/agent who submitted the order. Usually appears at the TOP of message as a short code e.g. "VRW-HQ", "KUMBO", "FAT FLUSHER", "A+ BRAIN". Can also appear at the BOTTOM as a standalone name ONLY if the order has NO labeled fields (Customer:, Phone:, etc). NEVER put partner names into notes. If no clear partner found, leave empty.
+- closer_name: the sales agent who closed the sale. If a standalone first name appears at the BOTTOM of a labeled order (one that uses Customer:, Phone:, Address:, Product: fields), treat it as closer_name NOT partner_name. Example: order ends with "Loveth" on its own line after all details → closer_name="Loveth", partner_name="". Also extract if explicitly labeled "Closer name:" or "Closer:". Do NOT duplicate the same name in both fields.
+- notes: ONLY delivery instructions e.g. "deliver by 2pm", "call before delivery", "available today". Never put partner names or closer names into notes.
 - is_outside_abuja: true ONLY for Nasarawa state (not Mararaba), Kaduna, Lagos. Mararaba = false.
+- If address contains an email address or URL, ignore it and use the physical delivery address instead.
 - If address contains an email address, ignore it and use the actual delivery address instead.
 
 Return this exact JSON:

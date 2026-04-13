@@ -54,24 +54,65 @@ async function saveOrder(order) {
     }
   }
 
-  // ── Same customer, same number, different product = bundle → suffix ──
-  if (orderNum && order.customer_phone1) {
+  // ── Same customer (phone) already has orders today → suffix new one ──
+  if (order.customer_phone1) {
     const { data: sameCustomer } = await supabase
       .from('orders')
       .select('order_number')
       .eq('customer_phone1', order.customer_phone1)
-      .like('order_number', `${orderNum}%`)
       .eq('order_date', today);
 
     if (sameCustomer && sameCustomer.length > 0) {
+      // Get the base order number (first one saved for this customer today)
+      const baseNum = sameCustomer[0].order_number.replace(/[a-z]+$/, '');
+      // Find highest suffix
       const suffixes = sameCustomer
-        .map(r => r.order_number.replace(orderNum, ''))
-        .filter(s => /^[a-z]?$/.test(s));
+        .map(r => r.order_number.replace(baseNum, ''))
+        .filter(s => /^[a-z]*$/.test(s));
       const lastSuffix = suffixes.filter(s => s.length === 1).sort().pop();
       orderNum = lastSuffix
-        ? `${orderNum}${String.fromCharCode(lastSuffix.charCodeAt(0) + 1)}`
-        : `${orderNum}a`;
-      console.log(`📝 Bundle detected — suffixed to: ${orderNum}`);
+        ? `${baseNum}${String.fromCharCode(lastSuffix.charCodeAt(0) + 1)}`
+        : `${baseNum}a`;
+      console.log(`📝 Bundle detected — using ${orderNum} for same customer`);
+    }
+  }
+
+  // ── Auto-assign captain based on zone + today's attendance ──
+  let autoCaption = null;
+  if (order.zone && order.zone !== 'UNASSIGNED') {
+    const { data: zoneMap } = await supabase
+      .from('zone_assignments')
+      .select('dispatcher_name')
+      .eq('zone', order.zone);
+
+    if (zoneMap && zoneMap.length > 0) {
+      const captains = zoneMap.map(r => r.dispatcher_name);
+      // Check who's present today
+      const { data: present } = await supabase
+        .from('attendance')
+        .select('dispatcher_name')
+        .in('dispatcher_name', captains)
+        .eq('date', today)
+        .eq('present', true);
+
+      if (present && present.length > 0) {
+        // Pick the one with fewest orders today (load balance)
+        const presentNames = present.map(p => p.dispatcher_name);
+        const { data: loads } = await supabase
+          .from('orders')
+          .select('dispatcher_name')
+          .in('dispatcher_name', presentNames)
+          .eq('order_date', today);
+
+        const countMap = {};
+        presentNames.forEach(n => countMap[n] = 0);
+        (loads || []).forEach(o => {
+          if (o.dispatcher_name) countMap[o.dispatcher_name] = (countMap[o.dispatcher_name] || 0) + 1;
+        });
+
+        autoCaption = Object.entries(countMap).sort((a,b) => a[1] - b[1])[0]?.[0];
+        console.log(`🚴 Auto-assigned to ${autoCaption} for zone ${order.zone}`);
+      }
     }
   }
 
@@ -93,6 +134,8 @@ async function saveOrder(order) {
     closer_name:     order.closer_name || null,
     closer_phone:    order.closer_phone || null,
     order_date:      today,
+    dispatcher_name: autoCaption || null,
+    updated_by:      autoCaption ? 'Bot' : null,
   }]);
 
   if (error) {
