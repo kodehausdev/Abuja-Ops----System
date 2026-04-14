@@ -19,21 +19,27 @@ async function getNextOrderNumber(today) {
     .not('order_number', 'is', null);
 
   if (!data || data.length === 0) return '1';
-
-  // Extract numeric part only, find max
   const nums = data
     .map(r => parseInt(r.order_number))
     .filter(n => !isNaN(n));
-
   return nums.length > 0 ? String(Math.max(...nums) + 1) : '1';
+}
+
+// Called once before bulk loop — returns integer so caller can increment
+async function getNextOrderNumberStart(today) {
+  const num = await getNextOrderNumber(today);
+  return parseInt(num);
 }
 
 async function saveOrder(order) {
   const today = watDate();
   let orderNum = String(order.order_number || '').trim();
 
-  // ── Auto-assign if no order number provided ──────────────────
-  if (!orderNum || orderNum === 'undefined') {
+  // ── Use suggested number from bulk loop (avoids race condition) ──
+  if ((!orderNum || orderNum === 'undefined') && order.suggested_number) {
+    orderNum = String(order.suggested_number);
+    console.log(`🔢 Using suggested order number: #${orderNum}`);
+  } else if (!orderNum || orderNum === 'undefined') {
     orderNum = await getNextOrderNumber(today);
     console.log(`🔢 Auto-assigned order number: #${orderNum}`);
   }
@@ -167,4 +173,4 @@ async function updateOrderStatus(id, status, paymentMethod = null) {
   return true;
 }
 
-module.exports = { saveOrder, getOrdersByZone, updateOrderStatus };
+module.exports = { saveOrder, getOrdersByZone, updateOrderStatus, getNextOrderNumberStart };

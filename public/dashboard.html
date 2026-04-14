@@ -555,7 +555,7 @@ tr:hover td { background: rgba(255,255,255,.02); }
   .print-title { font-size: 18px; font-weight: 700; }
   .print-meta { font-size: 10px; color: #555; text-align: right; }
 
-  .print-table { width: 100%; border-collapse: collapse; font-size: 9px; }
+  .print-table { width: 100%; border-collapse: collapse; font-size: 9px; border: 1.5px solid #000; }
   .print-table th {
     background: #111;
     color: #fff;
@@ -564,9 +564,13 @@ tr:hover td { background: rgba(255,255,255,.02); }
     font-size: 8px;
     text-transform: uppercase;
     letter-spacing: .5px;
+    border-right: 1px solid #444;
+    border-bottom: 1.5px solid #000;
   }
-  .print-table td { padding: 5px 7px; border-bottom: 1px solid #e5e7eb; }
-  .print-table tr:nth-child(even) td { background: #f9fafb; }
+  .print-table th:last-child { border-right: none; }
+  .print-table td { padding: 5px 7px; border-bottom: 1px solid #aaa; border-right: 1px solid #d1d5db; }
+  .print-table td:last-child { border-right: none; }
+  .print-table tr:nth-child(even) td { background: #f4f4f4; }
   .print-zone-header td {
     background: #1e2330 !important;
     color: #fff;
@@ -636,8 +640,10 @@ tr:hover td { background: rgba(255,255,255,.02); }
     <div class="date-display" id="date-display"></div>
     <button class="btn-print" id="btn-slips" onclick="printSlips()">🖨 Slips</button>
     <button class="btn-print" id="btn-cat" onclick="printCatalogue()">🖨 Catalogue</button>
-    <button class="btn-print" id="btn-byc" onclick="printByCaptain()">🖨 By Captain</button>
+    <button class="btn-print" id="btn-byc" onclick="showCaptainPicker()">🖨 By Captain</button>
+    <button class="btn-refresh" onclick="showAttendance()" style="margin-right:4px;">👥 Attendance</button>
     <button class="btn-refresh" onclick="showActivityLog()" style="margin-right:4px;">📋 Activity</button>
+    <button id="btn-settings" onclick="showSettings()" style="margin-right:4px;display:none;">⚙️ Settings</button>
     <button class="btn-refresh" onclick="loadOrders()">↻ Refresh</button>
     <div id="auth-area" style="display:flex;align-items:center;gap:8px;margin-left:4px;">
       <div id="auth-user" style="display:none;align-items:center;gap:8px;">
@@ -699,9 +705,13 @@ tr:hover td { background: rgba(255,255,255,.02); }
       <option value="delivered">Delivered</option>
     </select>
     <input type="date" id="f-date" onchange="renderTable()"/>
-    <select id="f-captain" onchange="renderTable()">
+    <select id="f-captain" onchange="renderTable(); document.getElementById('btn-copy-captain').style.display=this.value?'flex':'none';">
       <option value="">All captains</option>
     </select>
+    <button id="btn-copy-captain" onclick="copyCaptainFiltered()"
+      style="display:none;background:var(--blue-bg);border:1px solid rgba(59,130,246,.3);color:#60a5fa;border-radius:7px;padding:6px 12px;font-size:11px;cursor:pointer;white-space:nowrap;">
+      📋 Copy
+    </button>
     <div class="tab-group">
       <button class="tab-btn active" onclick="switchView('table', this)">Table</button>
       <button class="tab-btn" onclick="switchView('zone', this)">By Zone</button>
@@ -754,6 +764,97 @@ tr:hover td { background: rgba(255,255,255,.02); }
     <div id="captain-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px;align-items:start;"></div>
   </div>
 
+</div>
+
+<!-- Attendance Modal -->
+<div id="attendance-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:300;align-items:flex-start;justify-content:center;padding-top:60px;overflow-y:auto;">
+  <div style="background:var(--card);border:1px solid var(--border2);border-radius:14px;width:760px;max-width:95vw;max-height:85vh;display:flex;flex-direction:column;">
+    <div style="padding:18px 24px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-shrink:0;">
+      <div style="font-family:var(--display);font-weight:700;font-size:15px;">👥 Daily Attendance & Zone Assignments</div>
+      <button onclick="closeAttendance()" style="background:none;border:none;color:var(--muted);font-size:18px;cursor:pointer;">✕</button>
+    </div>
+    <div style="padding:16px 24px;border-bottom:1px solid var(--border);display:flex;gap:12px;align-items:center;flex-shrink:0;">
+      <div style="font-family:var(--mono);font-size:11px;color:var(--muted);">Mark who's available today. System will auto-assign orders by zone.</div>
+      <button onclick="markAllPresent()" style="background:var(--green-bg);border:1px solid var(--green-dim);color:var(--green);border-radius:7px;padding:5px 14px;font-size:11px;cursor:pointer;white-space:nowrap;">✅ All present</button>
+      <button onclick="clearAttendance()" style="background:var(--border);border:1px solid var(--border2);color:var(--muted2);border-radius:7px;padding:5px 14px;font-size:11px;cursor:pointer;white-space:nowrap;">Clear all</button>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:0;overflow-y:auto;flex:1;">
+      <!-- Left: Attendance -->
+      <div style="padding:16px 20px;border-right:1px solid var(--border);overflow-y:auto;">
+        <div style="font-family:var(--mono);font-size:9px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:12px;">Dispatchers Today</div>
+        <div id="attendance-list" style="display:flex;flex-direction:column;gap:6px;"></div>
+      </div>
+      <!-- Right: Zone assignments -->
+      <div style="padding:16px 20px;overflow-y:auto;">
+        <div style="font-family:var(--mono);font-size:9px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:12px;">Zone → Captain Mapping</div>
+        <div id="zone-assign-list" style="display:flex;flex-direction:column;gap:8px;"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Settings Modal -->
+<div id="settings-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:300;align-items:flex-start;justify-content:center;padding-top:60px;">
+  <div style="background:var(--card);border:1px solid var(--border2);border-radius:14px;width:520px;max-width:95vw;max-height:85vh;display:flex;flex-direction:column;">
+    <div style="padding:18px 24px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-shrink:0;">
+      <div style="font-family:var(--display);font-weight:700;font-size:15px;">⚙️ Settings</div>
+      <button onclick="closeSettings()" style="background:none;border:none;color:var(--muted);font-size:18px;cursor:pointer;">✕</button>
+    </div>
+    <div style="overflow-y:auto;flex:1;padding:20px 24px;display:flex;flex-direction:column;gap:24px;">
+
+      <!-- Add Rider -->
+      <div>
+        <div style="font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--green);margin-bottom:12px;">🚴 Dispatch Riders</div>
+        <div style="display:flex;gap:8px;margin-bottom:12px;">
+          <input id="new-rider-name" type="text" placeholder="Rider full name e.g. JOHN PAUL"
+            style="flex:1;background:var(--surface);border:1px solid var(--border2);color:var(--text);border-radius:7px;padding:8px 12px;font-size:12px;outline:none;text-transform:uppercase;"
+            oninput="this.value=this.value.toUpperCase()"
+            onkeydown="if(event.key==='Enter') addRider()"/>
+          <button onclick="addRider()"
+            style="background:var(--green-bg);border:1px solid var(--green-dim);color:var(--green);border-radius:7px;padding:8px 16px;font-size:12px;cursor:pointer;font-weight:600;white-space:nowrap;">
+            + Add Rider
+          </button>
+        </div>
+        <div id="riders-list" style="display:flex;flex-direction:column;gap:4px;max-height:200px;overflow-y:auto;"></div>
+      </div>
+
+      <!-- Add Partner -->
+      <div>
+        <div style="font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--blue);margin-bottom:12px;">🏪 Partners / Sellers</div>
+        <div style="display:flex;gap:8px;margin-bottom:12px;">
+          <input id="new-partner-name" type="text" placeholder="Partner name e.g. A+ BRAIN"
+            style="flex:1;background:var(--surface);border:1px solid var(--border2);color:var(--text);border-radius:7px;padding:8px 12px;font-size:12px;outline:none;text-transform:uppercase;"
+            oninput="this.value=this.value.toUpperCase()"
+            onkeydown="if(event.key==='Enter') addPartner()"/>
+          <button onclick="addPartner()"
+            style="background:var(--blue-bg);border:1px solid rgba(59,130,246,.3);color:#60a5fa;border-radius:7px;padding:8px 16px;font-size:12px;cursor:pointer;font-weight:600;white-space:nowrap;">
+            + Add Partner
+          </button>
+        </div>
+        <div id="partners-list" style="display:flex;flex-direction:column;gap:4px;max-height:200px;overflow-y:auto;"></div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- Captain Print Picker -->
+<div id="captain-picker-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:400;align-items:center;justify-content:center;">
+  <div style="background:var(--card);border:1px solid var(--border2);border-radius:14px;width:420px;max-width:95vw;padding:24px;">
+    <div style="font-family:var(--display);font-weight:700;font-size:15px;margin-bottom:16px;">🖨 Print Captain Catalogue</div>
+    <div style="font-size:12px;color:var(--muted2);margin-bottom:14px;">Select which captains to print. Each gets their own page.</div>
+    <div id="captain-picker-list" style="display:flex;flex-direction:column;gap:6px;max-height:300px;overflow-y:auto;margin-bottom:16px;"></div>
+    <div style="display:flex;gap:8px;justify-content:space-between;align-items:center;">
+      <div style="display:flex;gap:8px;">
+        <button onclick="selectAllCaptainsPrint(true)" style="background:var(--border);border:1px solid var(--border2);color:var(--muted2);border-radius:6px;padding:5px 12px;font-size:11px;cursor:pointer;">All</button>
+        <button onclick="selectAllCaptainsPrint(false)" style="background:var(--border);border:1px solid var(--border2);color:var(--muted2);border-radius:6px;padding:5px 12px;font-size:11px;cursor:pointer;">None</button>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <button onclick="document.getElementById('captain-picker-modal').style.display='none'" style="background:var(--border);border:1px solid var(--border2);color:var(--muted2);border-radius:7px;padding:7px 16px;font-size:12px;cursor:pointer;">Cancel</button>
+        <button onclick="doPrintByCaptain()" style="background:var(--green-dim);border:1px solid var(--green-dim);color:#fff;border-radius:7px;padding:7px 16px;font-size:12px;cursor:pointer;font-weight:600;">Print Selected</button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- Activity Log Modal -->
@@ -850,7 +951,7 @@ async function patch(id, data) {
 
 async function loadOrders() {
   try {
-    const data = await api('orders?select=id,order_number,raw_text,partner_name,customer_name,customer_phone1,customer_phone2,product,amount,raw_address,zone,verified,status,payment_method,report,order_date,created_at,closer_name,closer_phone,dispatcher_name,updated_by&order=created_at.desc&limit=500');
+    const data = await api('orders?select=id,order_number,raw_text,partner_name,customer_name,customer_phone1,customer_phone2,product,amount,raw_address,zone,verified,status,payment_method,report,order_date,created_at,closer_name,closer_phone,dispatcher_name,updated_by&order=order_date.desc,created_at.asc&limit=500');
     allOrders = Array.isArray(data) ? data : [];
     updateStats();
     populateFilters();
@@ -890,6 +991,17 @@ function populateFilters() {
     zones.map(z => `<option value="${z}" ${z===cur?'selected':''}>${z}</option>`).join('');
 }
 
+// Natural sort for order numbers: #1 < #1a < #1b < #2 < #10
+function sortByOrderNumber(a, b) {
+  const parse = s => {
+    const m = String(s || '').match(/^(\d+)([a-z]*)$/i);
+    return m ? [parseInt(m[1]), m[2] || ''] : [9999, s];
+  };
+  const [an, as] = parse(a.order_number);
+  const [bn, bs] = parse(b.order_number);
+  return an !== bn ? an - bn : as.localeCompare(bs);
+}
+
 function filtered() {
   const search  = document.getElementById('search').value.toLowerCase();
   const zone    = document.getElementById('f-zone').value;
@@ -916,7 +1028,8 @@ function filtered() {
 
 function renderTable() {
   if (currentView === 'zone') return renderZone();
-  const rows = filtered();
+  if (currentView === 'captain') return renderCaptainView();
+  const rows = filtered().sort(sortByOrderNumber);
   const tbody = document.getElementById('table-body');
 
   if (!rows.length) {
@@ -989,6 +1102,7 @@ function renderTable() {
           : `<span style="color:var(--muted);font-size:10px;font-family:var(--mono);opacity:0.35;">—</span>`
         }
         ${canWrite ? `<button class="action-btn" style="margin-top:4px" onclick="openEdit(${o.id})">✏️</button>` : ''}
+        <button class="action-btn" style="margin-top:4px;color:var(--blue);" onclick="copyOrder(${o.id})" title="Copy for WhatsApp">📋</button>
       </td>
     </tr>`;
   }).join('');
@@ -1123,16 +1237,15 @@ function printCatalogue() {
         <table class="print-table">
       <thead>
         <tr>
-          <th style="width:30px">No</th>
-          <th style="width:30px">SN</th>
-          <th style="width:80px">Note</th>
-          <th style="width:90px">Seller</th>
-          <th>Customer</th>
-          <th style="width:90px">Phone</th>
+          <th style="width:28px">No</th>
+          <th style="width:22px">SN</th>
+          <th style="width:95px">Seller Name</th>
+          <th>Customers Name</th>
           <th>Products</th>
           <th style="width:80px">Location</th>
-          <th style="width:80px">Captain</th>
-          <th style="width:25px">T/C</th>
+          <th style="width:95px">Customer Number</th>
+          <th style="width:22px">T/C</th>
+          <th style="width:70px">Report</th>
           <th style="width:60px">Amount</th>
         </tr>
       </thead>
@@ -1140,18 +1253,17 @@ function printCatalogue() {
 
   let sn = 1;
   for (const [zone, zoneOrders] of Object.entries(byZone).sort()) {
-    for (const o of zoneOrders) {
+    for (const o of zoneOrders.sort(sortByOrderNumber)) {
       html += `<tr>
-        <td style="color:#888">#${o.order_number||'—'}</td>
+        <td style="color:#888;font-size:8px">#${o.order_number||'—'}</td>
         <td style="text-align:center">${sn++}</td>
-        <td style="color:#555;font-style:italic">${o.report||''}</td>
         <td>${o.partner_name||'—'}</td>
-        <td><strong>${o.customer_name||'Unknown'}</strong></td>
-        <td style="font-family:monospace">${o.customer_phone1||'—'}${o.customer_phone2?'<br>'+o.customer_phone2:''}</td>
+        <td><strong>${o.customer_name||'Unknown'}</strong><br><span style="font-size:8px;color:#555">${o.product||''}</span></td>
         <td>${o.product||'—'}</td>
         <td>${o.zone||'—'}</td>
-        <td style="font-weight:600;color:#1a1a1a">${o.dispatcher_name||'—'}</td>
-        <td style="text-align:center">${o.payment_method||'—'}</td>
+        <td style="font-family:monospace;font-size:8px">${o.customer_phone1||'—'}${o.customer_phone2?'<br>'+o.customer_phone2:''}</td>
+        <td></td>
+        <td style="color:#555;font-style:italic;font-size:8px">${o.report||''}</td>
         <td style="text-align:right;font-weight:700">₦${Number(o.amount||0).toLocaleString()}</td>
       </tr>`;
     }
@@ -1289,6 +1401,11 @@ function renderCaptainView() {
               </div>
             </div>
             <div style="display:flex;align-items:center;gap:8px;">
+              <button onclick="event.stopPropagation();copyAllForCaptain('${captain.replace(/'/g,"\\'")}');"
+                style="background:var(--blue-bg);border:1px solid rgba(59,130,246,.3);color:#60a5fa;border-radius:6px;padding:4px 10px;font-size:10px;cursor:pointer;"
+                title="Copy all orders for ${captain}">
+                📋 Copy all
+              </button>
               <div class="zone-count">${orders.length}</div>
               <span id="chevron-${captainId}" style="color:var(--muted);font-size:12px;transition:transform .2s;">▼</span>
             </div>
@@ -1377,22 +1494,64 @@ function populateCaptainFilter() {
     used.map(c => `<option value="${c}" ${c===cur?'selected':''}>${c}</option>`).join('');
 }
 
-function printByCaptain() {
+function showCaptainPicker() {
   const rows = filtered();
-  const today = getDateLabel();
-
-  // Group by captain — skip unassigned
   const byCaptain = {};
   for (const o of rows) {
-    const c = o.dispatcher_name;
-    if (!c) continue; // skip unassigned
+    const c = o.dispatcher_name || 'UNASSIGNED';
     if (!byCaptain[c]) byCaptain[c] = [];
     byCaptain[c].push(o);
   }
 
-  const unassigned = rows.filter(o => !o.dispatcher_name);
+  const list = document.getElementById('captain-picker-list');
+  list.innerHTML = Object.entries(byCaptain)
+    .sort((a,b) => a[0] === 'UNASSIGNED' ? 1 : a[0].localeCompare(b[0]))
+    .map(([captain, orders]) => {
+      const total = orders.reduce((s,o) => s + (Number(o.amount)||0), 0);
+      return `
+        <label style="display:flex;align-items:center;gap:10px;padding:8px 12px;
+          background:var(--surface);border:1px solid var(--border);border-radius:7px;cursor:pointer;">
+          <input type="checkbox" value="${captain}" checked
+            style="width:15px;height:15px;accent-color:var(--green);cursor:pointer;"/>
+          <span style="flex:1;font-size:12px;font-weight:500;">
+            ${captain === 'UNASSIGNED' ? '⚠️ Unassigned' : '🚴 ' + captain}
+          </span>
+          <span style="font-family:var(--mono);font-size:10px;color:var(--muted);">
+            ${orders.length} orders · ₦${total.toLocaleString()}
+          </span>
+        </label>`;
+    }).join('');
 
-  if (!Object.keys(byCaptain).length && !unassigned.length) {
+  document.getElementById('captain-picker-modal').style.display = 'flex';
+}
+
+function selectAllCaptainsPrint(checked) {
+  document.querySelectorAll('#captain-picker-list input[type=checkbox]')
+    .forEach(cb => cb.checked = checked);
+}
+
+function doPrintByCaptain() {
+  document.getElementById('captain-picker-modal').style.display = 'none';
+  const selected = new Set(
+    Array.from(document.querySelectorAll('#captain-picker-list input:checked'))
+      .map(cb => cb.value)
+  );
+  printByCaptain(selected);
+}
+
+function printByCaptain(selectedCaptains) {
+  const rows = filtered();
+  const today = getDateLabel();
+
+  const byCaptain = {};
+  for (const o of rows) {
+    const c = o.dispatcher_name || 'UNASSIGNED';
+    if (selectedCaptains && !selectedCaptains.has(c)) continue;
+    if (!byCaptain[c]) byCaptain[c] = [];
+    byCaptain[c].push(o);
+  }
+
+  if (!Object.keys(byCaptain).length) {
     showToast('No orders to print'); return;
   }
 
@@ -1421,32 +1580,32 @@ function printByCaptain() {
         <table class="print-table">
           <thead>
             <tr>
-              <th style="width:30px">No</th>
-              <th style="width:25px">SN</th>
-              <th style="width:70px">Note</th>
-              <th style="width:85px">Seller</th>
-              <th>Customer</th>
-              <th style="width:85px">Phone</th>
+              <th style="width:28px">No</th>
+              <th style="width:22px">SN</th>
+              <th style="width:95px">Seller Name</th>
+              <th>Customers Name</th>
               <th>Products</th>
-              <th style="width:75px">Location</th>
-              <th style="width:25px">T/C</th>
+              <th style="width:80px">Location</th>
+              <th style="width:95px">Customer Number</th>
+              <th style="width:22px">T/C</th>
+              <th style="width:70px">Report</th>
               <th style="width:55px">Amount</th>
             </tr>
           </thead>
           <tbody>`;
 
     let sn = 1;
-    for (const o of orders.sort((a,b) => (a.zone||'').localeCompare(b.zone||''))) {
+    for (const o of orders.sort(sortByOrderNumber)) {
       html += `<tr>
-        <td style="color:#888">#${o.order_number||'—'}</td>
+        <td style="color:#888;font-size:8px">#${o.order_number||'—'}</td>
         <td style="text-align:center">${sn++}</td>
-        <td style="color:#555;font-style:italic">${o.report||''}</td>
         <td>${o.partner_name||'—'}</td>
         <td><strong>${o.customer_name||'Unknown'}</strong></td>
-        <td style="font-family:monospace;font-size:8px">${o.customer_phone1||'—'}${o.customer_phone2?'<br>'+o.customer_phone2:''}</td>
         <td>${o.product||'—'}</td>
         <td>${o.zone||'—'}</td>
-        <td style="text-align:center">${o.payment_method||'—'}</td>
+        <td style="font-family:monospace;font-size:8px">${o.customer_phone1||'—'}${o.customer_phone2?'<br>'+o.customer_phone2:''}</td>
+        <td></td>
+        <td style="color:#555;font-style:italic;font-size:8px">${o.report||''}</td>
         <td style="text-align:right;font-weight:700">₦${Number(o.amount||0).toLocaleString()}</td>
       </tr>`;
     }
@@ -1458,48 +1617,322 @@ function printByCaptain() {
     </div>`;
   }
 
-  // Last page: unassigned orders (if any)
-  if (unassigned.length) {
-    const total = unassigned.reduce((s, o) => s + (Number(o.amount)||0), 0);
-    html += `
-      <div>
-        <div class="print-header">
-          <div>
-            <div class="print-title" style="color:#e67e22;">⚠️ Unassigned Orders</div>
-            <div style="font-size:11px;color:#555;margin-top:2px;">${today}</div>
-          </div>
-          <div class="print-meta">${unassigned.length} orders &nbsp;·&nbsp; ₦${total.toLocaleString()}</div>
-        </div>
-        <table class="print-table">
-          <thead><tr>
-            <th>No</th><th>SN</th><th>Note</th><th>Seller</th>
-            <th>Customer</th><th>Phone</th><th>Products</th>
-            <th>Location</th><th>T/C</th><th>Amount</th>
-          </tr></thead>
-          <tbody>`;
-    let sn = 1;
-    for (const o of unassigned) {
-      html += `<tr>
-        <td>#${o.order_number||'—'}</td>
-        <td>${sn++}</td>
-        <td style="font-style:italic;color:#555">${o.report||''}</td>
-        <td>${o.partner_name||'—'}</td>
-        <td><strong>${o.customer_name||'Unknown'}</strong></td>
-        <td style="font-size:8px;font-family:monospace">${o.customer_phone1||'—'}</td>
-        <td>${o.product||'—'}</td>
-        <td>${o.zone||'—'}</td>
-        <td>${o.payment_method||'—'}</td>
-        <td style="text-align:right;font-weight:700">₦${Number(o.amount||0).toLocaleString()}</td>
-      </tr>`;
-    }
-    html += `</tbody></table></div>`;
-  }
-
   document.getElementById('print-area').innerHTML = html;
   window.print();
   showToast('🖨 Printing by captain...');
 }
-// ── ACTIVITY LOG ─────────────────────────────────────────────
+// ── ATTENDANCE & ZONE ASSIGNMENTS ────────────────────────────
+let attendanceData = {}; // dispatcher_name → present
+
+async function showAttendance() {
+  document.getElementById('attendance-modal').style.display = 'flex';
+  await loadAttendanceData();
+  await loadZoneAssignments();
+}
+
+function closeAttendance() {
+  document.getElementById('attendance-modal').style.display = 'none';
+}
+
+async function loadAttendanceData() {
+  const today = new Date(Date.now() + 60*60*1000).toISOString().split('T')[0];
+  const [dispatchers, todayAttendance] = await Promise.all([
+    api('dispatchers?select=name&order=name'),
+    api(`attendance?select=dispatcher_name,present&date=eq.${today}`)
+  ]);
+
+  // Build attendance map
+  attendanceData = {};
+  if (Array.isArray(todayAttendance)) {
+    todayAttendance.forEach(a => { attendanceData[a.dispatcher_name] = a.present; });
+  }
+
+  const list = document.getElementById('attendance-list');
+  list.innerHTML = (dispatchers || []).map(d => {
+    const present = attendanceData[d.name] === true;
+    return `
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 10px;background:${present ? 'var(--green-bg)' : 'var(--surface)'};border:1px solid ${present ? 'rgba(34,197,94,.2)' : 'var(--border)'};border-radius:7px;">
+        <span style="font-size:12px;font-weight:${present?'500':'400'};color:${present?'var(--green)':'var(--muted2)'};">${d.name}</span>
+        <label style="cursor:pointer;display:flex;align-items:center;gap:6px;">
+          <input type="checkbox" ${present ? 'checked' : ''}
+            onchange="toggleAttendance('${d.name.replace(/'/g,"\\'")}', this.checked)"
+            style="width:16px;height:16px;cursor:pointer;accent-color:var(--green)"/>
+        </label>
+      </div>`;
+  }).join('');
+}
+
+async function toggleAttendance(name, present) {
+  const today = new Date(Date.now() + 60*60*1000).toISOString().split('T')[0];
+  // Upsert attendance record
+  await fetch(`${SUPABASE_URL}/rest/v1/attendance`, {
+    method: 'POST',
+    headers: {
+      'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}`,
+      'Content-Type': 'application/json', 'Prefer': 'resolution=merge-duplicates'
+    },
+    body: JSON.stringify({ dispatcher_name: name, date: today, present })
+  });
+  attendanceData[name] = present;
+  showToast(`${present ? '✅' : '❌'} ${name} marked ${present ? 'present' : 'absent'}`);
+  // Refresh colour
+  await loadAttendanceData();
+}
+
+async function markAllPresent() {
+  const today = new Date(Date.now() + 60*60*1000).toISOString().split('T')[0];
+  const dispatchers = await api('dispatchers?select=name');
+  const records = (dispatchers || []).map(d => ({ dispatcher_name: d.name, date: today, present: true }));
+  await fetch(`${SUPABASE_URL}/rest/v1/attendance`, {
+    method: 'POST',
+    headers: {
+      'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}`,
+      'Content-Type': 'application/json', 'Prefer': 'resolution=merge-duplicates'
+    },
+    body: JSON.stringify(records)
+  });
+  await loadAttendanceData();
+  showToast('✅ All dispatchers marked present');
+}
+
+async function clearAttendance() {
+  const today = new Date(Date.now() + 60*60*1000).toISOString().split('T')[0];
+  await fetch(`${SUPABASE_URL}/rest/v1/attendance?date=eq.${today}`, {
+    method: 'DELETE',
+    headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` }
+  });
+  await loadAttendanceData();
+  showToast('🗑️ Attendance cleared');
+}
+
+async function loadZoneAssignments() {
+  const [locationData, assignments] = await Promise.all([
+    api('locations?select=name&order=name'),
+    api('zone_assignments?select=zone,dispatcher_name')
+  ]);
+
+  const uniqueZones = (locationData || []).map(l => l.name).filter(Boolean).sort();
+  const assignMap = {};
+  (assignments || []).forEach(a => {
+    if (!assignMap[a.zone]) assignMap[a.zone] = [];
+    assignMap[a.zone].push(a.dispatcher_name);
+  });
+
+  const list = document.getElementById('zone-assign-list');
+  list.innerHTML = uniqueZones.map(zone => {
+    const assigned = assignMap[zone] || [];
+    const anyPresent = assigned.some(n => attendanceData[n] === true);
+    const allAbsent = assigned.length > 0 && !anyPresent;
+
+    const tags = assigned.map(name => {
+      const present = attendanceData[name] === true;
+      return `<span style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;
+        border-radius:12px;font-size:10px;font-weight:500;
+        background:${present ? 'rgba(34,197,94,.15)' : 'rgba(245,158,11,.1)'};
+        border:1px solid ${present ? 'rgba(34,197,94,.3)' : 'rgba(245,158,11,.3)'};
+        color:${present ? 'var(--green)' : 'var(--amber)'};">
+        ${name}
+        <span onclick="removeZoneAssignment('${zone.replace(/'/g,"\\'")}','${name.replace(/'/g,"\\'")}');event.stopPropagation();"
+          style="cursor:pointer;opacity:.7;font-size:11px;line-height:1;" title="Remove">✕</span>
+      </span>`;
+    }).join('');
+
+    const availableToAdd = allCaptains.filter(c => !assigned.includes(c));
+    const addOpts = availableToAdd.map(c =>
+      `<option value="${c}">${c}</option>`
+    ).join('');
+
+    return `
+      <div style="padding:7px 10px;background:var(--surface);
+        border:1px solid ${anyPresent ? 'rgba(34,197,94,.2)' : allAbsent ? 'rgba(245,158,11,.2)' : 'var(--border)'};
+        border-radius:7px;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:${assigned.length?'6px':'0'};">
+          <span class="zone-tag" style="font-size:10px;min-width:90px;flex-shrink:0;">${zone}</span>
+          <div style="flex:1;display:flex;flex-wrap:wrap;gap:4px;">${tags || '<span style="font-size:10px;color:var(--muted)">— unassigned</span>'}</div>
+          <select onchange="addZoneAssignment('${zone.replace(/'/g,"\\'")}', this)"
+            style="background:var(--card);border:1px solid var(--border2);color:var(--muted2);
+            border-radius:6px;padding:3px 6px;font-size:10px;outline:none;flex-shrink:0;">
+            <option value="">+ add</option>
+            ${addOpts}
+          </select>
+          <span style="font-size:9px;font-family:var(--mono);white-space:nowrap;
+            color:${anyPresent ? 'var(--green)' : allAbsent ? 'var(--amber)' : 'var(--muted)'};">
+            ${anyPresent ? '✅' : allAbsent ? '⚠️' : '—'}
+          </span>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+async function addZoneAssignment(zone, sel) {
+  const captain = sel.value;
+  if (!captain) return;
+  sel.value = '';
+  await fetch(`${SUPABASE_URL}/rest/v1/zone_assignments`, {
+    method: 'POST',
+    headers: {
+      'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}`,
+      'Content-Type': 'application/json', 'Prefer': 'resolution=ignore-duplicates,return=minimal'
+    },
+    body: JSON.stringify([{ zone, dispatcher_name: captain }])
+  });
+  showToast(`✅ ${captain} added to ${zone}`);
+  await loadZoneAssignments();
+}
+
+async function removeZoneAssignment(zone, captain) {
+  await fetch(`${SUPABASE_URL}/rest/v1/zone_assignments?zone=eq.${encodeURIComponent(zone)}&dispatcher_name=eq.${encodeURIComponent(captain)}`, {
+    method: 'DELETE',
+    headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` }
+  });
+  showToast(`🗑️ ${captain} removed from ${zone}`);
+  await loadZoneAssignments();
+}
+
+document.getElementById('attendance-modal').addEventListener('click', function(e) {
+  if (e.target === this) closeAttendance();
+});
+
+// ── SETTINGS ─────────────────────────────────────────────────
+async function showSettings() {
+  if (!canWrite) { showToast('🔒 Sign in to access settings'); return; }
+  document.getElementById('settings-modal').style.display = 'flex';
+  await Promise.all([loadRidersList(), loadPartnersList()]);
+}
+
+function closeSettings() {
+  document.getElementById('settings-modal').style.display = 'none';
+}
+
+async function loadRidersList() {
+  const data = await api('dispatchers?select=id,name&order=name');
+  const list = document.getElementById('riders-list');
+  list.innerHTML = (data || []).map(r => `
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 10px;
+      background:var(--surface);border:1px solid var(--border);border-radius:6px;">
+      <span style="font-size:12px;">🚴 ${r.name}</span>
+    </div>`).join('');
+}
+
+async function loadPartnersList() {
+  const data = await api('partners?select=id,name&order=name');
+  const list = document.getElementById('partners-list');
+  list.innerHTML = (data || []).map(p => `
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 10px;
+      background:var(--surface);border:1px solid var(--border);border-radius:6px;">
+      <span style="font-size:12px;">🏪 ${p.name}</span>
+    </div>`).join('');
+}
+
+async function addRider() {
+  const input = document.getElementById('new-rider-name');
+  const name = input.value.trim().toUpperCase();
+  if (!name) { showToast('Enter a rider name'); return; }
+
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/dispatchers`, {
+    method: 'POST',
+    headers: {
+      'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}`,
+      'Content-Type': 'application/json', 'Prefer': 'return=minimal'
+    },
+    body: JSON.stringify({ name })
+  });
+
+  if (res.ok) {
+    input.value = '';
+    showToast(`✅ Rider "${name}" added`);
+    await loadRidersList();
+    await loadCaptains(); // refresh captain dropdowns
+  } else {
+    const err = await res.json();
+    if (err.code === '23505') showToast(`⚠️ "${name}" already exists`);
+    else showToast('❌ Could not add rider');
+  }
+}
+
+async function addPartner() {
+  const input = document.getElementById('new-partner-name');
+  const name = input.value.trim().toUpperCase();
+  if (!name) { showToast('Enter a partner name'); return; }
+
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/partners`, {
+    method: 'POST',
+    headers: {
+      'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}`,
+      'Content-Type': 'application/json', 'Prefer': 'return=minimal'
+    },
+    body: JSON.stringify({ name })
+  });
+
+  if (res.ok) {
+    input.value = '';
+    showToast(`✅ Partner "${name}" added`);
+    await loadPartnersList();
+    await loadPartners(); // refresh partner dropdowns
+  } else {
+    const err = await res.json();
+    if (err.code === '23505') showToast(`⚠️ "${name}" already exists`);
+    else showToast('❌ Could not add partner');
+  }
+}
+
+document.getElementById('settings-modal').addEventListener('click', function(e) {
+  if (e.target === this) closeSettings();
+});
+function formatOrderForWhatsApp(o) {
+  const lines = [];
+  lines.push(`✅ *Order #${o.order_number}*`);
+  lines.push(`📍 Zone: *${o.zone || 'UNASSIGNED'}*`);
+  lines.push(`👤 ${o.customer_name || 'Unknown'}`);
+  const phones = [o.customer_phone1, o.customer_phone2].filter(Boolean).join(' / ');
+  if (phones) lines.push(`📱 ${phones}`);
+  if (o.product) lines.push(`📦 ${o.product}`);
+  if (o.amount) lines.push(`💰 ₦${Number(o.amount).toLocaleString()}`);
+  if (o.partner_name) lines.push(`🏪 ${o.partner_name}`);
+  if (o.closer_name) lines.push(`👤 Closer: ${o.closer_name}`);
+  if (o.report) lines.push(`📝 ${o.report}`);
+  if (o.dispatcher_name) lines.push(`🚴 Rider: *${o.dispatcher_name}*`);
+  return lines.join('\n');
+}
+
+function copyCaptainFiltered() {
+  const captainName = document.getElementById('f-captain').value;
+  if (!captainName) { showToast('Select a captain first'); return; }
+  copyAllForCaptain(captainName);
+}
+
+function copyOrder(id) {
+  const o = allOrders.find(x => x.id === id);
+  if (!o) return;
+  navigator.clipboard.writeText(formatOrderForWhatsApp(o));
+  showToast('📋 Copied — paste in WhatsApp');
+}
+
+function copyAllForCaptain(captainName) {
+  const date = document.getElementById('f-date').value;
+  const orders = allOrders
+    .filter(o => (o.dispatcher_name || 'UNASSIGNED') === captainName)
+    .filter(o => !date || (o.order_date || o.created_at?.split('T')[0]) === date)
+    .sort(sortByOrderNumber);
+
+  if (!orders.length) { showToast('No orders for this captain'); return; }
+
+  const today = new Date(Date.now() + 60*60*1000)
+    .toLocaleDateString('en-NG', { weekday:'long', day:'numeric', month:'long' });
+  const total = orders.reduce((s, o) => s + (Number(o.amount)||0), 0);
+  const divider = '─'.repeat(28);
+
+  const text = [
+    `🚴 *${captainName} — ${orders.length} Orders*`,
+    `📅 ${today} · ₦${total.toLocaleString()}`,
+    divider,
+    ...orders.map(o => formatOrderForWhatsApp(o) + '\n' + divider)
+  ].join('\n');
+
+  navigator.clipboard.writeText(text);
+  showToast(`📋 ${orders.length} orders for ${captainName} copied!`);
+}
+
 async function logActivity(action, detail, orderId = null) {
   if (!currentUser) return;
   try {
@@ -1618,19 +2051,23 @@ async function initAuth() {
 
 function handleAuthUser(user) {
   currentUser = user;
-  canWrite = OPS_EMAILS.map(e=>e.toLowerCase()).includes(user.email?.toLowerCase());
+  const email = user.email?.toLowerCase();
+  canWrite = OPS_EMAILS.map(e=>e.toLowerCase()).includes(email);
+  console.log('Auth user:', email, '| canWrite:', canWrite, '| OPS_EMAILS:', OPS_EMAILS);
   document.getElementById('btn-signin').style.display = 'none';
+  document.getElementById('btn-settings').style.display = canWrite ? 'inline-flex' : 'none';
   const au = document.getElementById('auth-user');
   au.style.display = 'flex';
   document.getElementById('auth-name').textContent = user.user_metadata?.full_name || user.email;
   document.getElementById('auth-avatar').src = user.user_metadata?.avatar_url || '';
   updateWriteAccess();
-  showToast(canWrite ? `✅ Signed in — write access granted` : `👁️ Signed in — view only`);
+  showToast(canWrite ? `✅ ${email} — write access` : `👁️ ${email} — view only (not in ops list)`);
 }
 
 function handleSignOut() {
   currentUser = null; canWrite = false;
   document.getElementById('btn-signin').style.display = 'flex';
+  document.getElementById('btn-settings').style.display = 'none';
   document.getElementById('auth-user').style.display = 'none';
   updateWriteAccess();
 }

@@ -1,7 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const { parseOrder } = require('./parser');
-const { saveOrder } = require('./db');
+const { saveOrder, getNextOrderNumberStart } = require('./db');
 const { send } = require('./whatsapp');
 const { createClient } = require('@supabase/supabase-js');
 
@@ -83,13 +83,28 @@ app.post('/webhook', async (req, res) => {
 
 // ── SPLIT BULK ORDERS ─────────────────────────────────────────
 function splitOrders(text) {
-  // Strip WhatsApp forward headers like "[08/04, 14:16] kodehaus 🏠: "
+  // Strip WhatsApp forward headers
   const stripped = text.replace(/\[\d{2}\/\d{2},\s*\d{2}:\d{2}\]\s*[^:]+:\s*/g, '\n').trim();
 
-  // Split on lines starting with #number
-  const blocks = stripped.split(/(?=^#\d+)/m)
+  // Try split on #number first
+  let blocks = stripped.split(/(?=^#\d+)/m)
     .map(b => b.trim())
-    .filter(b => b.length > 10 && /^#\d+/m.test(b));
+    .filter(b => b.length > 10);
+
+  if (blocks.length > 1) return blocks;
+
+  // No #numbers — split on phone number pattern (new order starts when we see a phone)
+  // Each order has a Nigerian phone: 07xx, 08xx, 09xx, +234
+  blocks = stripped.split(/(?=^(?:0[789]\d{9}|\+234\d{10}))/m)
+    .map(b => b.trim())
+    .filter(b => b.length > 10);
+
+  if (blocks.length > 1) return blocks;
+
+  // Last resort — split on double newlines (blank line between orders)
+  blocks = stripped.split(/\n{2,}/)
+    .map(b => b.trim())
+    .filter(b => b.length > 20 && (/0[789]\d{9}/.test(b) || /\+234/.test(b)));
 
   return blocks.length > 0 ? blocks : [stripped];
 }
@@ -139,12 +154,14 @@ async function handleMessage(from, text) {
   const today = watDate();
   const results = { saved: [], duplicates: [], failed: [] };
 
+  // Get next order number ONCE before loop — increment in memory to avoid race conditions
+  let nextNum = await getNextOrderNumberStart(today);
+
   for (const block of blocks) {
     const result = await parseOrder(block);
 
     if (!result.success) {
       if (result.error === 'AI_DOWN') {
-        // Notify staff AI is down — they need to enter manually
         await send(from,
           `⚠️ *AI parser is temporarily unavailable.*\n\n` +
           `Please try again in a few minutes, or enter the order manually on the dashboard.\n\n` +
@@ -165,15 +182,26 @@ async function handleMessage(from, text) {
       order.is_outside_abuja = true;
     }
 
+    // Pass next number if order has no # — db.js will use it
+    if (!order.order_number) {
+      order.suggested_number = String(nextNum);
+      nextNum++;
+    }
+
     const saved = await saveOrder(order);
 
     if (saved && saved.success) {
-      order.order_number = saved.orderNumber; // use actual number (may be suffixed)
+      order.order_number = saved.orderNumber;
+      // If this used our suggested number, advance counter
+      if (order.suggested_number) {
+        const usedNum = parseInt(saved.orderNumber);
+        if (!isNaN(usedNum) && usedNum >= nextNum) nextNum = usedNum + 1;
+      }
       results.saved.push(order);
     } else if (saved === 'duplicate') {
       results.duplicates.push(order);
     } else {
-      results.failed.push(`#${order.order_number}`);
+      results.failed.push(`#${order.order_number || '?'}`);
     }
   }
 
