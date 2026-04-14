@@ -112,7 +112,8 @@ function checkOutsideAbuja(address, zone) {
 
 const PROMPT = `You are an order parser for TCD, a delivery company in Abuja, Nigeria.
 
-Extract order details from the raw text and return ONLY valid JSON. No markdown, no explanation.
+You will receive ONE customer order. Extract the details and return ONLY valid JSON. No markdown, no explanation.
+If the text contains multiple customers, parse ONLY the FIRST complete customer order you find.
 
 ZONE LIST — pick the single best match from ONLY these zones:
 ${ZONES.join(', ')}
@@ -133,8 +134,11 @@ ZONE RULES (follow exactly):
 - order_number: ALWAYS use the # number at the very TOP of the message. NEVER use CRM reference numbers like "Daggo Group-CRM-ORD-..." or "CSS-2026-..." — those are partner internal IDs.
 - product: ALWAYS include quantity in the product field. e.g. "2x Ovella Capsule", "3 Bottles of Baozem Tea", "1 Pack Tummy Trimmer". Never strip the quantity — it is critical for delivery.
 - partner_name: the store/brand/agent who submitted the order. Usually appears at the TOP of message as a short code e.g. "VRW-HQ", "KUMBO", "FAT FLUSHER", "A+ BRAIN". Can also appear at the BOTTOM as a standalone name ONLY if the order has NO labeled fields (Customer:, Phone:, etc). NEVER put partner names into notes. If no clear partner found, leave empty.
+- customer_phone1: extract the primary phone number. Remove ALL commas, spaces, and punctuation — e.g. ",,,08124638493" → "08124638493", "+234 801 234 5678" → "+2348012345678". Nigerian numbers start with 0 or +234.
+- customer_phone2: second phone number if present, same cleaning rules.
 - closer_name: the sales agent who closed the sale. If a standalone first name appears at the BOTTOM of a labeled order (one that uses Customer:, Phone:, Address:, Product: fields), treat it as closer_name NOT partner_name. Example: order ends with "Loveth" on its own line after all details → closer_name="Loveth", partner_name="". Also extract if explicitly labeled "Closer name:" or "Closer:". Do NOT duplicate the same name in both fields.
-- notes: ONLY delivery instructions e.g. "deliver by 2pm", "call before delivery", "available today". Never put partner names or closer names into notes.
+- amount: extract the numeric value only (no ₦ symbol, no commas). Look for ₦, N, or plain numbers near product lines. If "PAID" appears with no amount visible, set payment_method to "T" and amount to 0.
+- notes: ONLY delivery instructions e.g. "deliver by 2pm", "call before delivery", "available today". Never put partner names or closer names into notes. "PAID" is NOT a note — it means payment_method = "T".
 - is_outside_abuja: true ONLY for Nasarawa state (not Mararaba), Kaduna, Lagos. Mararaba = false.
 - If address contains an email address or URL, ignore it and use the physical delivery address instead.
 - If address contains an email address, ignore it and use the actual delivery address instead.

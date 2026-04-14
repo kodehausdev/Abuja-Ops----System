@@ -12,7 +12,7 @@ app.use(express.static('public'));
 const VERIFY_TOKEN = process.env.VERIFY_TOKEN || 'tcd_ops_verify';
 const processed = new Set();
 const messageQueue = {}; // batches rapid messages from same sender
-const BATCH_WINDOW = 2000; // 2 seconds — collect messages then process together
+const BATCH_WINDOW = 5000; // 5 seconds — gives time for all forwarded messages to arrive
 
 function getSupabase() {
   return createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
@@ -84,29 +84,39 @@ app.post('/webhook', async (req, res) => {
 // ── SPLIT BULK ORDERS ─────────────────────────────────────────
 function splitOrders(text) {
   // Strip WhatsApp forward headers
-  const stripped = text.replace(/\[\d{2}\/\d{2},\s*\d{2}:\d{2}\]\s*[^:]+:\s*/g, '\n').trim();
+  let t = text.replace(/\[\d{2}\/\d{2},\s*\d{2}:\d{2}\]\s*[^:]+:\s*/g, '\n').trim();
 
-  // Try split on #number first
-  let blocks = stripped.split(/(?=^#\d+)/m)
-    .map(b => b.trim())
-    .filter(b => b.length > 10);
-
+  // 1. Split on #number — explicit order numbers
+  let blocks = t.split(/(?=^#\d+)/m).map(b => b.trim()).filter(b => b.length > 10);
   if (blocks.length > 1) return blocks;
 
-  // No #numbers — split on phone number pattern (new order starts when we see a phone)
-  // Each order has a Nigerian phone: 07xx, 08xx, 09xx, +234
-  blocks = stripped.split(/(?=^(?:0[789]\d{9}|\+234\d{10}))/m)
-    .map(b => b.trim())
-    .filter(b => b.length > 10);
+  // Inject separators before known order-start patterns
+  t = t.replace(/([^\n])\n(Name[\s:])/gim, '$1\n\n\n$2');
+  t = t.replace(/(N[\d,]+)\n([A-Z][a-z])/g, '$1\n\n\n$2');
 
+  // Helper — does block look like an order?
+  const isOrder = b => {
+    const clean = b.replace(/,+/g, ''); // remove commas (handles ,,,08124638493)
+    return /0[789]\d{9}/.test(clean) ||
+           /\+234\d{10}/.test(clean) ||
+           /phone/i.test(b) ||
+           /₦\d/.test(b) ||
+           /N\d{4,}/.test(b);
+  };
+
+  // 2. Split on triple newlines
+  blocks = t.split(/\n\s*\n\s*\n/)
+    .map(b => b.trim())
+    .filter(b => b.length > 15 && isOrder(b));
   if (blocks.length > 1) return blocks;
 
-  // Last resort — split on double newlines (blank line between orders)
-  blocks = stripped.split(/\n{2,}/)
+  // 3. Split on double newlines
+  blocks = t.split(/\n\s*\n/)
     .map(b => b.trim())
-    .filter(b => b.length > 20 && (/0[789]\d{9}/.test(b) || /\+234/.test(b)));
+    .filter(b => b.length > 15 && isOrder(b));
+  if (blocks.length > 1) return blocks;
 
-  return blocks.length > 0 ? blocks : [stripped];
+  return [t.trim()];
 }
 
 // ── MAIN HANDLER ──────────────────────────────────────────────
@@ -153,11 +163,13 @@ async function handleMessage(from, text) {
 
   const today = watDate();
   const results = { saved: [], duplicates: [], failed: [] };
+  const seenInBatch = new Set(); // track phone+product within this batch
 
-  // Get next order number ONCE before loop — increment in memory to avoid race conditions
+  // Get next order number ONCE before loop
   let nextNum = await getNextOrderNumberStart(today);
 
   for (const block of blocks) {
+    console.log(`\n📦 Processing block: "${block.slice(0,60).replace(/\n/g,' ')}..."`);
     const result = await parseOrder(block);
 
     if (!result.success) {
@@ -173,6 +185,23 @@ async function handleMessage(from, text) {
     }
 
     const order = result.data;
+
+    // Reject if Gemini returned empty/garbage
+    if (!order.customer_phone1 && !order.customer_name && !order.amount) {
+      console.warn('⚠️ Empty parse result for block:', block.slice(0, 80));
+      console.warn('   Parsed data:', JSON.stringify(order));
+      results.failed.push(block.split('\n')[0].trim().slice(0, 40));
+      continue;
+    }
+
+    // In-batch dedup — same phone + same product in same paste = only save first
+    const batchKey = `${order.customer_phone1}|${(order.product||'').split(' ')[0]}`;
+    if (seenInBatch.has(batchKey)) {
+      results.duplicates.push(order);
+      continue;
+    }
+    seenInBatch.add(batchKey);
+
     order.raw_text    = block;
     order.staff_phone = from;
     order.status      = 'pending';
@@ -227,8 +256,11 @@ async function sendResults(from, results, isBulk) {
 
   // Duplicates summary
   if (results.duplicates.length > 0) {
-    let msg = `⚠️ *${results.duplicates.length} already saved today:*\n`;
-    for (const o of results.duplicates) msg += `#${o.order_number} ${o.customer_name}\n`;
+    let msg = `⚠️ *${results.duplicates.length} duplicate${results.duplicates.length>1?'s':''} skipped* — same phone + product already saved today:\n\n`;
+    for (const o of results.duplicates) {
+      msg += `• ${o.customer_name} (${o.customer_phone1||'no phone'}) — ${(o.product||'').slice(0,30)}\n`;
+    }
+    msg += `\n_If this is a genuine new order, add it manually on the dashboard._`;
     await send(from, msg);
   }
 
