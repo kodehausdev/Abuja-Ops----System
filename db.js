@@ -19,9 +19,12 @@ async function getNextOrderNumber(today) {
     .not('order_number', 'is', null);
 
   if (!data || data.length === 0) return '1';
+
   const nums = data
     .map(r => parseInt(r.order_number))
     .filter(n => !isNaN(n));
+
+  // Use max + 1 (not gap filling) — gaps are intentional when staff skip numbers
   return nums.length > 0 ? String(Math.max(...nums) + 1) : '1';
 }
 
@@ -44,17 +47,41 @@ async function saveOrder(order) {
     console.log(`🔢 Auto-assigned order number: #${orderNum}`);
   }
 
-  // ── True duplicate: same phone + same product + same day → block ──
-  if (order.customer_phone1 && order.product) {
-    const { data: exactDup } = await supabase
+  // ── True duplicate: same order_number already exists today → block ──
+  if (orderNum) {
+    const { data: numDup } = await supabase
       .from('orders')
-      .select('id')
-      .eq('customer_phone1', order.customer_phone1)
+      .select('id, customer_name')
+      .eq('order_number', orderNum)
       .eq('order_date', today)
-      .ilike('product', `%${(order.product).split(' ')[0]}%`)
       .limit(1);
 
-    if (exactDup && exactDup.length > 0) {
+    if (numDup && numDup.length > 0) {
+      console.warn(`⚠️  Duplicate order number #${orderNum} already saved today`);
+      return 'duplicate';
+    }
+  }
+
+  // ── True duplicate: same phone + same product + same day → block ──
+  if (order.customer_phone1 && order.product) {
+    // Normalize phone — strip spaces, dashes, leading +234 → 0
+    const normalizePhone = p => p.replace(/\s+/g,'')
+      .replace(/^\+234/,'0')
+      .replace(/^234(?=\d{10})/,'0'); // handles 2348141708312 → 08141708312
+    const incomingPhone = normalizePhone(order.customer_phone1);
+
+    const { data: todayOrders } = await supabase
+      .from('orders')
+      .select('id, customer_phone1')
+      .eq('order_date', today)
+      .ilike('product', `%${(order.product).split(' ')[0]}%`);
+
+    const exactDup = (todayOrders || []).find(o => {
+      if (!o.customer_phone1) return false;
+      return normalizePhone(o.customer_phone1) === incomingPhone;
+    });
+
+    if (exactDup) {
       console.warn(`⚠️  True duplicate — same phone + product today`);
       return 'duplicate';
     }
@@ -80,6 +107,23 @@ async function saveOrder(order) {
         ? `${baseNum}${String.fromCharCode(lastSuffix.charCodeAt(0) + 1)}`
         : `${baseNum}a`;
       console.log(`📝 Bundle detected — using ${orderNum} for same customer`);
+    }
+  }
+
+  // ── Same order number already exists today (different customer) → use next available number ──
+  if (orderNum) {
+    const baseNum = String(orderNum).replace(/[a-z]+$/i, '');
+    const { data: sameNum } = await supabase
+      .from('orders')
+      .select('order_number')
+      .eq('order_number', baseNum)
+      .eq('order_date', today);
+
+    if (sameNum && sameNum.length > 0) {
+      // #5 already exists — assign next available clean number
+      const nextAvailable = await getNextOrderNumber(today);
+      console.log(`📝 #${baseNum} already exists — reassigning to #${nextAvailable}`);
+      orderNum = nextAvailable;
     }
   }
 
