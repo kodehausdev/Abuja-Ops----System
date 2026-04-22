@@ -2,12 +2,19 @@ require('dotenv').config();
 const express = require('express');
 const { parseOrder } = require('./parser');
 const { saveOrder, getNextOrderNumberStart, assignCaptain } = require('./db');
-const { send } = require('./whatsapp');
+const { send: sendMeta }   = require('./whatsapp');
+const { send: sendTwilio } = require('./whatsapp-twilio');
 const { createClient } = require('@supabase/supabase-js');
 
 const app = express();
 app.use(express.json());
+app.use(express.urlencoded({ extended: false })); // required for Twilio form-data webhooks
 app.use(express.static('public'));
+
+// Set PROVIDER=twilio in .env to use Twilio, otherwise defaults to Meta
+const PROVIDER = (process.env.PROVIDER || 'meta').toLowerCase();
+const send = PROVIDER === 'twilio' ? sendTwilio : sendMeta;
+console.log(`📡 Provider: ${PROVIDER.toUpperCase()}`);
 
 const VERIFY_TOKEN = process.env.VERIFY_TOKEN || 'tcd_ops_verify';
 const processed = new Set();
@@ -37,10 +44,39 @@ app.post('/api/assign-captain', async (req, res) => {
   if (!order_id || !dispatcher_name) return res.status(400).json({ error: 'order_id and dispatcher_name required' });
   const result = await assignCaptain(order_id, dispatcher_name);
   if (!result) return res.status(500).json({ error: 'Failed to assign captain' });
-  res.json({ success: true, captain_number: result.captainNumber });
+  res.json({ success: true });
 });
 
-// ── WEBHOOK VERIFY ────────────────────────────────────────────
+// ── TWILIO WEBHOOK ────────────────────────────────────────────
+// Twilio sends form-encoded POST to /webhook/twilio — no GET verify step
+app.post('/webhook/twilio', async (req, res) => {
+  res.sendStatus(200);
+  const from = req.body?.From; // whatsapp:+2348XXXXXXXXX
+  const text = req.body?.Body?.trim();
+  if (!from || !text) return;
+
+  const msgSid = req.body?.MessageSid || `${from}:${Date.now()}`;
+  if (processed.has(msgSid)) return;
+  processed.add(msgSid);
+  if (processed.size > 1000) processed.clear();
+
+  console.log(`\n📩 [Twilio][${from}]: ${text.slice(0, 80)}`);
+  const lower = text.toLowerCase();
+  const isCommand = lower === 'list' || lower === 'orders' || lower === 'help' ||
+    lower === 'edit' || lower.startsWith('edit ') || lower.startsWith('edit #');
+  if (isCommand) return await handleMessage(from, text);
+
+  if (!messageQueue[from]) messageQueue[from] = { texts: [], timer: null };
+  messageQueue[from].texts.push(text);
+  if (messageQueue[from].timer) clearTimeout(messageQueue[from].timer);
+  messageQueue[from].timer = setTimeout(async () => {
+    const batch = messageQueue[from].texts.join('\n');
+    delete messageQueue[from];
+    await handleMessage(from, batch);
+  }, BATCH_WINDOW);
+});
+
+// ── META WEBHOOK VERIFY ───────────────────────────────────────
 app.get('/webhook', (req, res) => {
   if (req.query['hub.mode'] === 'subscribe' &&
       req.query['hub.verify_token'] === VERIFY_TOKEN) {
@@ -50,7 +86,7 @@ app.get('/webhook', (req, res) => {
   res.sendStatus(403);
 });
 
-// ── INCOMING MESSAGES ─────────────────────────────────────────
+// ── META INCOMING MESSAGES ────────────────────────────────────
 app.post('/webhook', async (req, res) => {
   res.sendStatus(200);
   const message = req.body?.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
@@ -63,9 +99,8 @@ app.post('/webhook', async (req, res) => {
 
   const from = message.from;
   const text = message.text.body.trim();
-  console.log(`\n📩 [${from}]: ${text.slice(0, 80)}`);
+  console.log(`\n📩 [Meta][${from}]: ${text.slice(0, 80)}`);
 
-  // Commands bypass batching — process immediately
   const lower = text.toLowerCase();
   const isCommand = lower === 'list' || lower === 'orders' || lower === 'help' ||
     lower === 'edit' || lower.startsWith('edit ') || lower.startsWith('edit #');
@@ -74,14 +109,12 @@ app.post('/webhook', async (req, res) => {
     return await handleMessage(from, text);
   }
 
-  // ── Batch rapid order messages from same sender ──
   if (!messageQueue[from]) {
     messageQueue[from] = { texts: [], timer: null };
   }
 
   messageQueue[from].texts.push(text);
 
-  // Reset timer — wait for more messages before processing
   if (messageQueue[from].timer) clearTimeout(messageQueue[from].timer);
   messageQueue[from].timer = setTimeout(async () => {
     const batch = messageQueue[from].texts.join('\n');
