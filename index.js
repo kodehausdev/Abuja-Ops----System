@@ -1,7 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const { parseOrder } = require('./parser');
-const { saveOrder, getNextOrderNumberStart } = require('./db');
+const { saveOrder, getNextOrderNumberStart, assignCaptain } = require('./db');
 const { send } = require('./whatsapp');
 const { createClient } = require('@supabase/supabase-js');
 
@@ -29,6 +29,15 @@ app.get('/config', (req, res) => {
     supabaseKey:  process.env.SUPABASE_KEY, // anon/publishable key — safe to expose
     opsEmails:    (process.env.OPS_EMAILS || '').split(',').map(e => e.trim()).filter(Boolean),
   });
+});
+
+// ── ASSIGN CAPTAIN (dashboard manual assign) ─────────────────
+app.post('/api/assign-captain', async (req, res) => {
+  const { order_id, dispatcher_name } = req.body;
+  if (!order_id || !dispatcher_name) return res.status(400).json({ error: 'order_id and dispatcher_name required' });
+  const result = await assignCaptain(order_id, dispatcher_name);
+  if (!result) return res.status(500).json({ error: 'Failed to assign captain' });
+  res.json({ success: true, captain_number: result.captainNumber });
 });
 
 // ── WEBHOOK VERIFY ────────────────────────────────────────────
@@ -216,11 +225,11 @@ async function handleMessage(from, text) {
       order.is_outside_abuja = true;
     }
 
-    // Pass next number if order has no # — db.js will use it
-    if (!order.order_number) {
-      order.suggested_number = String(nextNum);
-      nextNum++;
-    }
+    // Always: save the group's original # as partner_ref, assign a fresh global number
+    order.partner_ref = order.order_number || null;
+    order.order_number = null;
+    order.suggested_number = String(nextNum);
+    nextNum++;
 
     const saved = await saveOrder(order);
 

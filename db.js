@@ -36,30 +36,25 @@ async function getNextOrderNumberStart(today) {
 
 async function saveOrder(order) {
   const today = watDate();
-  let orderNum = String(order.order_number || '').trim();
 
-  // ── Use suggested number from bulk loop (avoids race condition) ──
-  if ((!orderNum || orderNum === 'undefined') && order.suggested_number) {
-    orderNum = String(order.suggested_number);
-    console.log(`🔢 Using suggested order number: #${orderNum}`);
-  } else if (!orderNum || orderNum === 'undefined') {
+  // ── partner_ref = original group number from raw text (#1, #2 per group — can repeat) ──
+  // ── order_number = global sequential across all groups today (never repeats) ──
+  const partnerRef = order.partner_ref || null;
+  let orderNum = order.suggested_number
+    ? String(order.suggested_number)
+    : await getNextOrderNumber(today);
+  console.log(`🔢 Global #${orderNum}${partnerRef ? ` (group ref: #${partnerRef})` : ''}`);
+
+  // ── Race guard: global number already taken (concurrent save) → bump up ──
+  const { data: numDup } = await supabase
+    .from('orders')
+    .select('id')
+    .eq('order_number', orderNum)
+    .eq('order_date', today)
+    .limit(1);
+  if (numDup && numDup.length > 0) {
     orderNum = await getNextOrderNumber(today);
-    console.log(`🔢 Auto-assigned order number: #${orderNum}`);
-  }
-
-  // ── True duplicate: same order_number already exists today → block ──
-  if (orderNum) {
-    const { data: numDup } = await supabase
-      .from('orders')
-      .select('id, customer_name')
-      .eq('order_number', orderNum)
-      .eq('order_date', today)
-      .limit(1);
-
-    if (numDup && numDup.length > 0) {
-      console.warn(`⚠️  Duplicate order number #${orderNum} already saved today`);
-      return 'duplicate';
-    }
+    console.warn(`⚠️  Race condition — bumped to #${orderNum}`);
   }
 
   // ── True duplicate: same phone + same product + same day → block ──
@@ -107,23 +102,6 @@ async function saveOrder(order) {
         ? `${baseNum}${String.fromCharCode(lastSuffix.charCodeAt(0) + 1)}`
         : `${baseNum}a`;
       console.log(`📝 Bundle detected — using ${orderNum} for same customer`);
-    }
-  }
-
-  // ── Same order number already exists today (different customer) → use next available number ──
-  if (orderNum) {
-    const baseNum = String(orderNum).replace(/[a-z]+$/i, '');
-    const { data: sameNum } = await supabase
-      .from('orders')
-      .select('order_number')
-      .eq('order_number', baseNum)
-      .eq('order_date', today);
-
-    if (sameNum && sameNum.length > 0) {
-      // #5 already exists — assign next available clean number
-      const nextAvailable = await getNextOrderNumber(today);
-      console.log(`📝 #${baseNum} already exists — reassigning to #${nextAvailable}`);
-      orderNum = nextAvailable;
     }
   }
 
@@ -178,6 +156,7 @@ async function saveOrder(order) {
   // ── Save ──────────────────────────────────────────────────────
   const { error } = await supabase.from('orders').insert([{
     order_number:    orderNum,
+    partner_ref:     partnerRef,
     raw_text:        order.raw_text || '',
     partner_name:    order.partner_name || null,
     customer_name:   order.customer_name || 'Unknown',
@@ -219,6 +198,24 @@ async function getOrdersByZone(date = new Date()) {
   return data || [];
 }
 
+// Called when dashboard manually assigns a dispatcher to an order
+async function assignCaptain(orderId, dispatcherName) {
+  const today = watDate();
+  const { count } = await supabase
+    .from('orders')
+    .select('id', { count: 'exact', head: true })
+    .eq('dispatcher_name', dispatcherName)
+    .eq('order_date', today);
+  const captainNumber = (count || 0) + 1;
+  const { error } = await supabase
+    .from('orders')
+    .update({ dispatcher_name: dispatcherName, captain_number: captainNumber, updated_by: 'Dashboard' })
+    .eq('id', orderId);
+  if (error) { console.error('❌ Assign captain error:', error.message); return false; }
+  console.log(`🚴 Manually assigned ${dispatcherName} #${captainNumber} to order ${orderId}`);
+  return { captainNumber };
+}
+
 async function updateOrderStatus(id, status, paymentMethod = null) {
   const update = { status };
   if (paymentMethod) update.payment_method = paymentMethod;
@@ -227,4 +224,4 @@ async function updateOrderStatus(id, status, paymentMethod = null) {
   return true;
 }
 
-module.exports = { saveOrder, getOrdersByZone, updateOrderStatus, getNextOrderNumberStart };
+module.exports = { saveOrder, getOrdersByZone, updateOrderStatus, getNextOrderNumberStart, assignCaptain };
