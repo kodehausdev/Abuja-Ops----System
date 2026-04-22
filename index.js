@@ -225,11 +225,11 @@ async function handleMessage(from, text) {
       order.is_outside_abuja = true;
     }
 
-    // Always: save the group's original # as partner_ref, assign a fresh global number
-    order.partner_ref = order.order_number || null;
-    order.order_number = null;
-    order.suggested_number = String(nextNum);
-    nextNum++;
+    // Pass next number only if the group's order has no # — db.js uses it
+    if (!order.order_number) {
+      order.suggested_number = String(nextNum);
+      nextNum++;
+    }
 
     const saved = await saveOrder(order);
 
