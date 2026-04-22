@@ -129,6 +129,7 @@ async function saveOrder(order) {
 
   // ── Auto-assign captain based on zone + today's attendance ──
   let autoCaption = null;
+  let captainNumber = null;
   if (order.zone && order.zone !== 'UNASSIGNED') {
     const { data: zoneMap } = await supabase
       .from('zone_assignments')
@@ -161,7 +162,15 @@ async function saveOrder(order) {
         });
 
         autoCaption = Object.entries(countMap).sort((a,b) => a[1] - b[1])[0]?.[0];
-        console.log(`🚴 Auto-assigned to ${autoCaption} for zone ${order.zone}`);
+        if (autoCaption) {
+          const { count: captainCount } = await supabase
+            .from('orders')
+            .select('id', { count: 'exact', head: true })
+            .eq('dispatcher_name', autoCaption)
+            .eq('order_date', today);
+          captainNumber = (captainCount || 0) + 1;
+        }
+        console.log(`🚴 Auto-assigned to ${autoCaption} #${captainNumber} for zone ${order.zone}`);
       }
     }
   }
@@ -185,6 +194,7 @@ async function saveOrder(order) {
     closer_phone:    order.closer_phone || null,
     order_date:      today,
     dispatcher_name: autoCaption || null,
+    captain_number:  captainNumber || null,
     updated_by:      autoCaption ? 'Bot' : null,
   }]);
 
