@@ -11,8 +11,8 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: false })); // required for Twilio form-data webhooks
 app.use(express.static('public'));
 
-// Set PROVIDER=twilio in .env to use Twilio, otherwise defaults to Meta
-const PROVIDER = (process.env.PROVIDER || 'meta').toLowerCase();
+// Defaults to Twilio — set PROVIDER=meta in .env to fall back to Meta
+const PROVIDER = (process.env.PROVIDER || 'twilio').toLowerCase();
 const send = PROVIDER === 'twilio' ? sendTwilio : sendMeta;
 console.log(`📡 Provider: ${PROVIDER.toUpperCase()}`);
 
@@ -109,12 +109,14 @@ app.post('/webhook', async (req, res) => {
     return await handleMessage(from, text);
   }
 
+  // ── Batch rapid order messages from same sender ──
   if (!messageQueue[from]) {
     messageQueue[from] = { texts: [], timer: null };
   }
 
   messageQueue[from].texts.push(text);
 
+  // Reset timer — wait for more messages before processing
   if (messageQueue[from].timer) clearTimeout(messageQueue[from].timer);
   messageQueue[from].timer = setTimeout(async () => {
     const batch = messageQueue[from].texts.join('\n');
@@ -157,6 +159,58 @@ function splitOrders(text) {
   return [t.trim()];
 }
 
+// ── CAPTAIN HELPERS ───────────────────────────────────────────
+let cachedCaptains = null;
+let captainsCachedAt = 0;
+
+async function getCaptains() {
+  if (cachedCaptains && Date.now() - captainsCachedAt < 3600000) return cachedCaptains;
+  const supabase = getSupabase();
+  const { data } = await supabase.from('dispatchers').select('name');
+  cachedCaptains = (data || []).map(r => r.name.toUpperCase());
+  captainsCachedAt = Date.now();
+  return cachedCaptains;
+}
+
+function fuzzyMatchCaptain(input, captains) {
+  const q = input.trim().toUpperCase();
+  if (captains.includes(q)) return q;
+  const sw = captains.find(c => c.startsWith(q) || q.startsWith(c));
+  if (sw) return sw;
+  const co = captains.find(c => c.includes(q) || q.includes(c));
+  if (co) return co;
+  const words = q.split(/\s+/).filter(w => w.length > 2);
+  for (const word of words) {
+    const m = captains.find(c => c.includes(word));
+    if (m) return m;
+  }
+  return null;
+}
+
+// Splits full paste into sections by "Captain: Name" lines
+function splitByCaptain(text) {
+  const lines = text.split('\n');
+  const sections = [];
+  let current = null;
+
+  for (const line of lines) {
+    const m = line.match(/^Captain:\s*(.+)/i);
+    if (m) {
+      if (current) sections.push(current);
+      current = { captain: m[1].trim(), text: '' };
+    } else {
+      if (current) {
+        current.text += line + '\n';
+      } else {
+        // text before any Captain: line — no captain prefix
+        if (!sections.length) current = { captain: null, text: line + '\n' };
+      }
+    }
+  }
+  if (current) sections.push(current);
+  return sections.map(s => ({ ...s, text: s.text.trim() })).filter(s => s.text.length > 0);
+}
+
 // ── MAIN HANDLER ──────────────────────────────────────────────
 async function handleMessage(from, text) {
   const lower = text.toLowerCase();
@@ -189,41 +243,50 @@ async function handleMessage(from, text) {
     return send(from, `That doesn't look like an order. Paste a customer order with a # number, name, phone and address.`);
   }
 
-  // ── Split into individual orders ──
-  const blocks = splitOrders(stripped);
-  const isBulk = blocks.length > 1;
+  // ── Split by Captain: sections, then into individual order blocks ──
+  const captainSections = splitByCaptain(stripped);
+  const hasCaptainPrefix = captainSections.some(s => s.captain);
+  const captains = hasCaptainPrefix ? await getCaptains() : [];
 
-  if (isBulk) {
-    await send(from, `⏳ Processing ${blocks.length} orders...`);
-  } else {
-    await send(from, `⏳ Parsing order...`);
+  // Flatten all sections into [{ block, captain }]
+  const allBlocks = [];
+  for (const section of captainSections) {
+    let matchedCaptain = null;
+    if (section.captain) {
+      matchedCaptain = fuzzyMatchCaptain(section.captain, captains);
+      if (!matchedCaptain) {
+        await send(from, `⚠️ Captain "${section.captain}" not recognised. Orders will be saved unassigned.\n\nKnown captains: ${captains.slice(0, 10).join(', ')}`);
+      }
+    }
+    if (!section.text) continue;
+    for (const block of splitOrders(section.text)) {
+      allBlocks.push({ block, captain: matchedCaptain });
+    }
   }
+
+  const isBulk = allBlocks.length > 1;
+  await send(from, isBulk ? `⏳ Processing ${allBlocks.length} orders...` : `⏳ Parsing order...`);
 
   const today = watDate();
   const results = { saved: [], duplicates: [], failed: [] };
-  const seenInBatch = new Set(); // track phone+product within this batch
-
-  // Get next order number ONCE before loop
+  const seenInBatch = new Set();
   let nextNum = await getNextOrderNumberStart(today);
 
-  for (const block of blocks) {
-    // Clean block before parsing — strip @mentions, preamble text before order details
+  for (const { block, captain } of allBlocks) {
     const cleanBlock = block
-      .replace(/@\S+/g, '')                          // remove @all @mentions
+      .replace(/@\S+/g, '')
       .replace(/after pickup you deliver with below info/gi, '')
-      .replace(/treat as urgent[^\\n]*/gi, '')
-      .replace(/^\s*[\n]+/, '')                       // remove leading blank lines
+      .replace(/treat as urgent[^\n]*/gi, '')
+      .replace(/^\s*\n+/, '')
       .trim();
 
-    console.log(`\n📦 Processing block: "${cleanBlock.slice(0,60).replace(/\n/g,' ')}..."`);
+    console.log(`\n📦 [${captain || 'unassigned'}] "${cleanBlock.slice(0,60).replace(/\n/g,' ')}..."`);
     const result = await parseOrder(cleanBlock);
 
     if (!result.success) {
       if (result.error === 'AI_DOWN') {
         await send(from,
-          `⚠️ *AI parser is temporarily unavailable.*\n\n` +
-          `Please try again in a few minutes, or enter the order manually on the dashboard.\n\n` +
-          `Raw text saved for reference:\n${block.slice(0, 200)}...`
+          `⚠️ AI parser is temporarily unavailable.\n\nTry again in a few minutes, or add the order manually on the dashboard.\n\nRaw text:\n${block.slice(0, 200)}`
         );
       }
       results.failed.push(block.split('\n')[0].trim());
@@ -232,22 +295,17 @@ async function handleMessage(from, text) {
 
     const order = result.data;
 
-    // Reject if Gemini returned empty/garbage
     if (!order.customer_phone1 && !order.customer_name && !order.amount) {
-      console.warn('⚠️ Empty parse result for block:', cleanBlock.slice(0, 80));
-      console.warn('   Parsed data:', JSON.stringify(order));
+      console.warn('⚠️ Empty parse result:', cleanBlock.slice(0, 80));
       results.failed.push(block.split('\n')[0].trim().slice(0, 40));
       continue;
     }
 
-    order.raw_text = block; // save original unstripped text
+    order.raw_text     = block;
+    order.force_captain = captain;
 
-    // In-batch dedup — same phone + same product in same paste = only save first
     const batchKey = `${order.customer_phone1}|${(order.product||'').split(' ')[0]}`;
-    if (seenInBatch.has(batchKey)) {
-      results.duplicates.push(order);
-      continue;
-    }
+    if (seenInBatch.has(batchKey)) { results.duplicates.push(order); continue; }
     seenInBatch.add(batchKey);
 
     order.staff_phone = from;
@@ -258,7 +316,6 @@ async function handleMessage(from, text) {
       order.is_outside_abuja = true;
     }
 
-    // Pass next number only if the group's order has no # — db.js uses it
     if (!order.order_number) {
       order.suggested_number = String(nextNum);
       nextNum++;
@@ -268,7 +325,6 @@ async function handleMessage(from, text) {
 
     if (saved && saved.success) {
       order.order_number = saved.orderNumber;
-      // If this used our suggested number, advance counter
       if (order.suggested_number) {
         const usedNum = parseInt(saved.orderNumber);
         if (!isNaN(usedNum) && usedNum >= nextNum) nextNum = usedNum + 1;
@@ -281,7 +337,6 @@ async function handleMessage(from, text) {
     }
   }
 
-  // ── Build reply ──
   await sendResults(from, results, isBulk);
 }
 
@@ -291,6 +346,7 @@ async function sendResults(from, results, isBulk) {
     const outside = o.is_outside_abuja ? ' ⚠️' : '';
     let msg = `✅ *Order #${o.order_number} confirmed!*\n\n`;
     msg += `📍 Zone: *${o.zone}*${outside}\n`;
+    if (o.force_captain) msg += `🚴 Captain: *${o.force_captain}*\n`;
     msg += `👤 ${o.customer_name}\n`;
     msg += `📱 ${o.customer_phone1}${o.customer_phone2 ? ' / ' + o.customer_phone2 : ''}\n`;
     msg += `📦 ${o.product}\n`;
