@@ -528,6 +528,105 @@ tr:hover td { background: rgba(255,255,255,.02); }
 }
 .btn-print:hover { background: var(--green-bg); color: var(--green); border-color: var(--green-dim); }
 
+/* ── MOBILE RESPONSIVE ──────────────────────────────────────── */
+@media (max-width: 768px) {
+
+  /* Header */
+  header { padding: 0 14px; height: 52px; }
+  .header-right { gap: 8px; }
+  .live-pill { display: none !important; }
+  .date-display { display: none !important; }
+  #btn-slips, #btn-cat, #btn-byc,
+  #btn-attendance, #btn-activity, #btn-settings, #btn-main-refresh { display: none !important; }
+  #btn-mobile-menu { display: flex !important; }
+  #btn-paste-orders { margin-right: 0 !important; font-size: 11px !important; padding: 6px 10px !important; }
+  #auth-name { display: none !important; }
+
+  /* Mobile nav */
+  #mobile-nav { display: none; }
+
+  /* Main */
+  .main { padding: 12px 14px; }
+
+  /* Stats: 3 columns */
+  .stats { grid-template-columns: repeat(3, 1fr); gap: 7px; margin-bottom: 14px; }
+  .stat { padding: 10px 12px; }
+  .stat-value { font-size: 20px; }
+  .stat.s-revenue .stat-value { font-size: 15px; }
+  .stat-label { font-size: 8px; margin-bottom: 4px; }
+
+  /* Controls: stack vertically */
+  .controls { flex-direction: column; gap: 8px; margin-bottom: 12px; }
+  .search-wrap { max-width: 100%; min-width: 0; }
+  select, input[type=date] { width: 100%; }
+  .tab-group { margin-left: 0; }
+  .tab-btn { flex: 1; text-align: center; font-size: 12px; padding: 7px 6px; }
+  #btn-copy-captain { width: 100%; justify-content: center; }
+
+  /* Prevent iOS input zoom */
+  input, select, textarea { font-size: 16px !important; }
+
+  /* Table → hidden on mobile; card view shown */
+  .table-wrap { display: none !important; }
+  #card-view { display: flex !important; flex-direction: column; gap: 10px; }
+
+  /* Zone + Captain grids: single column */
+  .zone-grid { grid-template-columns: 1fr; }
+  #captain-grid { grid-template-columns: 1fr !important; }
+
+  /* All modals → bottom sheet */
+  #attendance-modal, #settings-modal, #activity-modal,
+  #edit-modal, #paste-orders-modal, #captain-picker-modal {
+    padding-top: 0 !important;
+    align-items: flex-end !important;
+  }
+  #attendance-modal > div, #settings-modal > div, #activity-modal > div,
+  #edit-modal > div, #paste-orders-modal > div, #captain-picker-modal > div {
+    width: 100% !important;
+    max-width: 100% !important;
+    border-radius: 18px 18px 0 0 !important;
+    max-height: 90dvh !important;
+  }
+
+  /* Toast */
+  .toast { bottom: 16px; right: 14px; left: 14px; font-size: 13px; }
+
+  /* Order cards */
+  .order-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+  }
+  .oc-top { display: flex; align-items: center; gap: 8px; }
+  .oc-num { font-family: var(--mono); font-size: 12px; font-weight: 600; color: var(--muted2); min-width: 32px; }
+  .oc-name { font-weight: 600; font-size: 15px; line-height: 1.2; }
+  .oc-phone { font-family: var(--mono); font-size: 12px; color: var(--muted2); }
+  .oc-product { font-size: 13px; color: var(--muted2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .oc-meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .oc-amount { font-family: var(--mono); font-size: 17px; font-weight: 700; color: var(--green); }
+  .oc-captain { font-family: var(--mono); font-size: 11px; color: #60a5fa; }
+  .oc-actions { display: flex; gap: 8px; }
+  .oc-actions .action-btn {
+    flex: 1; text-align: center; padding: 9px 6px;
+    font-size: 13px; border-radius: 8px;
+  }
+
+  /* Mobile nav items */
+  .mobile-nav-btn {
+    background: none; border: none; color: var(--text);
+    padding: 13px 4px; font-family: var(--body); font-size: 15px;
+    cursor: pointer; text-align: left;
+    border-bottom: 1px solid var(--border); width: 100%;
+    display: block;
+  }
+  .mobile-nav-btn:last-child { border-bottom: none; }
+  .mobile-nav-btn:active { background: var(--card); border-radius: 6px; }
+}
+
 /* ── PRINT STYLES ── */
 @media print {
   @page { size: A4 landscape; margin: 8mm; }
@@ -650,10 +749,11 @@ tr:hover td { background: rgba(255,255,255,.02); }
     <button class="btn-print" id="btn-cat" onclick="printCatalogue()">🖨 Catalogue</button>
     <button class="btn-print" id="btn-byc" onclick="showCaptainPicker()">🖨 By Captain</button>
     <button id="btn-paste-orders" onclick="showPasteOrders()" style="display:none;background:var(--green-bg);border:1px solid var(--green-dim);color:var(--green);border-radius:7px;padding:6px 14px;font-size:12px;cursor:pointer;margin-right:4px;font-family:var(--body);">📥 Paste Orders</button>
-    <button class="btn-refresh" onclick="showAttendance()" style="margin-right:4px;">👥 Attendance</button>
-    <button class="btn-refresh" onclick="showActivityLog()" style="margin-right:4px;">📋 Activity</button>
+    <button id="btn-attendance" class="btn-refresh" onclick="showAttendance()" style="margin-right:4px;">👥 Attendance</button>
+    <button id="btn-activity" class="btn-refresh" onclick="showActivityLog()" style="margin-right:4px;">📋 Activity</button>
     <button id="btn-settings" onclick="showSettings()" style="margin-right:4px;display:none;">⚙️ Settings</button>
-    <button class="btn-refresh" onclick="loadOrders()">↻ Refresh</button>
+    <button id="btn-main-refresh" class="btn-refresh" onclick="loadOrders()">↻ Refresh</button>
+    <button id="btn-mobile-menu" onclick="toggleMobileMenu()" style="display:none;background:var(--border);border:1px solid var(--border2);color:var(--muted2);border-radius:7px;width:36px;height:32px;align-items:center;justify-content:center;cursor:pointer;font-size:18px;flex-shrink:0;">☰</button>
     <div id="auth-area" style="display:flex;align-items:center;gap:8px;margin-left:4px;">
       <div id="auth-user" style="display:none;align-items:center;gap:8px;">
         <img id="auth-avatar" style="width:26px;height:26px;border-radius:50%;border:1px solid var(--border2);" src="" alt=""/>
@@ -667,6 +767,17 @@ tr:hover td { background: rgba(255,255,255,.02); }
     </div>
   </div>
 </header>
+
+<!-- Mobile nav dropdown (shown only on mobile via toggleMobileMenu) -->
+<div id="mobile-nav" style="display:none;position:fixed;top:52px;left:0;right:0;background:var(--surface);border-bottom:1px solid var(--border);z-index:99;padding:8px 18px 4px;">
+  <button class="mobile-nav-btn" onclick="loadOrders();toggleMobileMenu()">↻ Refresh</button>
+  <button class="mobile-nav-btn" onclick="showAttendance();toggleMobileMenu()">👥 Attendance</button>
+  <button class="mobile-nav-btn" onclick="showActivityLog();toggleMobileMenu()">📋 Activity</button>
+  <button id="mobile-btn-settings" class="mobile-nav-btn" onclick="showSettings();toggleMobileMenu()" style="display:none;">⚙️ Settings</button>
+  <button class="mobile-nav-btn" onclick="printCatalogue();toggleMobileMenu()">🖨 Catalogue</button>
+  <button class="mobile-nav-btn" onclick="printSlips();toggleMobileMenu()">🖨 Slips</button>
+  <button class="mobile-nav-btn" onclick="showCaptainPicker();toggleMobileMenu()">🖨 By Captain</button>
+</div>
 
 <div class="main">
 
@@ -755,6 +866,8 @@ tr:hover td { background: rgba(255,255,255,.02); }
         </tbody>
       </table>
     </div>
+    <!-- Card view — visible only on mobile via CSS -->
+    <div id="card-view" style="display:none;"></div>
   </div>
 
   <!-- Zone View -->
@@ -1175,6 +1288,53 @@ function renderTable() {
         ${canWrite ? `<button class="action-btn" style="margin-top:2px;color:#f87171;border-color:rgba(248,113,113,.3);" onclick="deleteOrder(${o.id})" title="Delete order">🗑</button>` : ''}
       </td>
     </tr>`;
+  }).join('');
+  renderCards();
+}
+
+function renderCards() {
+  const cardView = document.getElementById('card-view');
+  if (!cardView) return;
+  const rows = filtered().sort(sortByOrderNumber);
+
+  if (!rows.length) {
+    cardView.innerHTML = `<div class="empty"><div class="empty-icon">📦</div><div class="empty-text">No orders found</div></div>`;
+    return;
+  }
+
+  cardView.innerHTML = rows.map(o => {
+    const status = o.status || 'pending';
+    const isOutside = ['KEFFI','SULEJA','MADALA'].includes(o.zone);
+
+    let actionBtn = '';
+    if (canWrite) {
+      if (status === 'pending')
+        actionBtn = `<button class="action-btn" style="flex:1;" onclick="updateStatus(${o.id},'dispatched')">Dispatch</button>`;
+      else if (status === 'dispatched')
+        actionBtn = `<button class="action-btn deliver" style="flex:1;" onclick="updateStatus(${o.id},'delivered')">Deliver ✓</button>`;
+      else
+        actionBtn = `<span style="flex:1;text-align:center;font-size:11px;color:var(--muted);font-family:var(--mono);padding:9px 0;display:block;">✓ done</span>`;
+    }
+
+    return `<div class="order-card">
+      <div class="oc-top">
+        <span class="oc-num">#${o.order_number || '—'}</span>
+        <span class="zone-tag ${isOutside ? 'outside' : ''}" style="flex:1;">${o.zone || '—'}</span>
+        <span class="badge badge-${status}">${status}</span>
+      </div>
+      <div class="oc-name">${o.customer_name || 'Unknown'}</div>
+      <div class="oc-phone">${o.customer_phone1 || '—'}${o.customer_phone2 ? ' · ' + o.customer_phone2 : ''}</div>
+      <div class="oc-product">${o.product || '—'}${o.partner_name ? ' · ' + o.partner_name : ''}</div>
+      <div class="oc-meta">
+        <span class="oc-amount">₦${Number(o.amount || 0).toLocaleString()}</span>
+        ${o.dispatcher_name ? `<span class="oc-captain">🚴 ${o.dispatcher_name}</span>` : ''}
+      </div>
+      <div class="oc-actions">
+        ${actionBtn}
+        ${canWrite ? `<button class="action-btn" style="padding:9px 14px;font-size:15px;" onclick="openEdit(${o.id})">✏️</button>` : ''}
+        <button class="action-btn" style="padding:9px 14px;font-size:15px;color:var(--blue);" onclick="copyOrder(${o.id})">📋</button>
+      </div>
+    </div>`;
   }).join('');
 }
 
@@ -2224,6 +2384,8 @@ function handleAuthUser(user) {
   document.getElementById('btn-signin').style.display = 'none';
   document.getElementById('btn-settings').style.display = canWrite ? 'inline-flex' : 'none';
   document.getElementById('btn-paste-orders').style.display = canWrite ? 'inline-flex' : 'none';
+  const mobileSettings = document.getElementById('mobile-btn-settings');
+  if (mobileSettings) mobileSettings.style.display = canWrite ? 'block' : 'none';
   const au = document.getElementById('auth-user');
   au.style.display = 'flex';
   document.getElementById('auth-name').textContent = user.user_metadata?.full_name || user.email;
@@ -2237,6 +2399,8 @@ function handleSignOut() {
   document.getElementById('btn-signin').style.display = 'flex';
   document.getElementById('btn-settings').style.display = 'none';
   document.getElementById('btn-paste-orders').style.display = 'none';
+  const mobileSettings = document.getElementById('mobile-btn-settings');
+  if (mobileSettings) mobileSettings.style.display = 'none';
   document.getElementById('auth-user').style.display = 'none';
   updateWriteAccess();
 }
@@ -2361,6 +2525,22 @@ document.getElementById('edit-modal').addEventListener('click', function(e) {
 
 document.getElementById('paste-orders-modal').addEventListener('click', function(e) {
   if (e.target === this) closePasteOrders(false);
+});
+
+// ── MOBILE MENU ───────────────────────────────────────────────
+
+function toggleMobileMenu() {
+  const nav = document.getElementById('mobile-nav');
+  nav.style.display = nav.style.display === 'flex' ? 'none' : 'flex';
+  nav.style.flexDirection = 'column';
+}
+
+document.addEventListener('click', function(e) {
+  const nav = document.getElementById('mobile-nav');
+  const btn = document.getElementById('btn-mobile-menu');
+  if (nav && nav.style.display === 'flex' && !nav.contains(e.target) && btn && !btn.contains(e.target)) {
+    nav.style.display = 'none';
+  }
 });
 
 // ── PASTE ORDERS ──────────────────────────────────────────────
