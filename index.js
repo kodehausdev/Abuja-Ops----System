@@ -129,7 +129,7 @@ app.post('/webhook', async (req, res) => {
 // ── SPLIT BULK ORDERS ─────────────────────────────────────────
 function splitOrders(text) {
   // Strip WhatsApp forward headers
-  let t = text.replace(/\[\d{2}\/\d{2},\s*\d{2}:\d{2}\]\s*[^:]+:\s*/g, '\n').trim();
+  let t = text.replace(/\[\d{1,2}\/\d{1,2}(?:\/\d{2,4})?[,\s]+\d{1,2}:\d{2}(?::\d{2})?(?:\s*[APap][Mm])?\]\s*[^:\n]+:\s*/g, '\n').trim();
 
   // 1. Split on #number — when orders have explicit numbers, this is definitive
   // Each #N at start of line = exactly one order. Don't apply any other logic.
@@ -236,7 +236,7 @@ async function handleMessage(from, text) {
   }
 
   // ── Strip forward headers before checking ──
-  const stripped = text.replace(/\[\d{2}\/\d{2},\s*\d{2}:\d{2}\]\s*[^:]+:\s*/g, '\n').trim();
+  const stripped = text.replace(/\[\d{1,2}\/\d{1,2}(?:\/\d{2,4})?[,\s]+\d{1,2}:\d{2}(?::\d{2})?(?:\s*[APap][Mm])?\]\s*[^:\n]+:\s*/g, '\n').trim();
 
   // ── Pre-check: looks like an order? ──
   const looksLikeOrder = /^#\d+/m.test(stripped) || /0[789]\d{9}/.test(stripped) || /\+234/.test(stripped);
@@ -499,7 +499,7 @@ app.post('/parse-orders', async (req, res) => {
     text = `Captain: ${captain.trim()}\n${text}`;
   }
 
-  const stripped = text.replace(/\[\d{2}\/\d{2},\s*\d{2}:\d{2}\]\s*[^:]+:\s*/g, '\n').trim();
+  const stripped = text.replace(/\[\d{1,2}\/\d{1,2}(?:\/\d{2,4})?[,\s]+\d{1,2}:\d{2}(?::\d{2})?(?:\s*[APap][Mm])?\]\s*[^:\n]+:\s*/g, '\n').trim();
 
   const captainSections = splitByCaptain(stripped);
   const hasCaptainPrefix = captainSections.some(s => s.captain);
