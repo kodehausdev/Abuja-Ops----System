@@ -2657,7 +2657,12 @@ async function processOrders() {
   loadCaptains();
   loadPartners();
   loadOrders();
-  setInterval(loadOrders, 30000);
+  // Realtime — re-fetches instantly when any order is inserted/updated/deleted
+  _supaAuth.channel('orders-realtime')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => {
+      loadOrders();
+    })
+    .subscribe();
 })();
 </script>
 </body>
