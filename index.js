@@ -4,6 +4,7 @@ const { parseOrder } = require('./parser');
 const { saveOrder, getNextOrderNumberStart, assignCaptain } = require('./db');
 const { send: sendMeta }   = require('./whatsapp');
 const { send: sendTwilio } = require('./whatsapp-twilio');
+const {send: sendWhapi} = require('./whatsapp-whapi');
 const { createClient } = require('@supabase/supabase-js');
 
 const app = express();
@@ -13,7 +14,10 @@ app.use(express.static('public'));
 
 // Defaults to Twilio — set PROVIDER=meta in .env to fall back to Meta
 const PROVIDER = (process.env.PROVIDER || 'twilio').toLowerCase();
-const send = PROVIDER === 'twilio' ? sendTwilio : sendMeta;
+const send = PROVIDER === 'whapi' ? sendWhapi 
+           : PROVIDER === 'meta'  ? sendMeta 
+           : sendTwilio;
+
 console.log(`📡 Provider: ${PROVIDER.toUpperCase()}`);
 
 const VERIFY_TOKEN = process.env.VERIFY_TOKEN || 'tcd_ops_verify';
@@ -76,6 +80,54 @@ app.post('/webhook/twilio', async (req, res) => {
   }, BATCH_WINDOW);
 });
 
+// ── WHAPI WEBHOOK ─────────────────────────────────────────────
+app.post('/webhook/whapi', async (req, res) => {
+  res.sendStatus(200); // 1. Tell Whapi we got it immediately
+  
+  const message = req.body?.messages?.[0];
+  if (!message || message.type !== 'text') return;
+
+  const msgId = message.id;
+  if (processed.has(msgId)) return;
+  processed.add(msgId);
+  if (processed.size > 1000) processed.clear();
+
+  const from = message.from.split('@')[0];
+  const text = message.text?.body?.trim();
+  if (!from || !text) return;
+
+  const lower = text.toLowerCase();
+  const isCommand = ['list', 'orders', 'help', 'edit'].some(cmd => lower.startsWith(cmd));
+
+  // 2. ONLY bypass batching for commands
+  if (isCommand) {
+    console.log(`⚡ Command detected from ${from}: ${text}`);
+    return await handleMessage(from, text);
+  }
+
+  // 3. FORCE everything else into the queue
+  if (!messageQueue[from]) {
+    messageQueue[from] = { texts: [], timer: null };
+  }
+  
+  messageQueue[from].texts.push(text);
+  console.log(`📥 Added to batch [${from}]: ${text.slice(0, 30)}... (Queue size: ${messageQueue[from].texts.length})`);
+
+  if (messageQueue[from].timer) clearTimeout(messageQueue[from].timer);
+
+  messageQueue[from].timer = setTimeout(async () => {
+    const fullBatch = messageQueue[from].texts.join('\n\n---\n\n');
+    const count = messageQueue[from].texts.length;
+    delete messageQueue[from];
+    
+    console.log(`🚀 Processing BATCH of ${count} orders for ${from}`);
+    // This calls the AI once for the entire list
+    await handleMessage(from, fullBatch); 
+  }, 10000); // 10 seconds is usually the "sweet spot" for bulk forwards
+});
+
+
+
 // ── META WEBHOOK VERIFY ───────────────────────────────────────
 app.get('/webhook', (req, res) => {
   if (req.query['hub.mode'] === 'subscribe' &&
@@ -124,6 +176,10 @@ app.post('/webhook', async (req, res) => {
     await handleMessage(from, batch);
   }, BATCH_WINDOW);
 });
+
+
+
+
 
 // ── SPLIT BULK ORDERS ─────────────────────────────────────────
 function splitOrders(text) {
