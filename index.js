@@ -150,6 +150,7 @@ app.get('/webhook', (req, res) => {
 // ── META INCOMING MESSAGES ────────────────────────────────────
 app.post('/webhook', async (req, res) => {
   res.sendStatus(200);
+  console.log('📥 POST /webhook body:', JSON.stringify(req.body).slice(0, 300));
   const message = req.body?.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
   if (!message || !message.text) return;
 
@@ -193,7 +194,7 @@ app.post('/webhook', async (req, res) => {
 // ── SPLIT BULK ORDERS ─────────────────────────────────────────
 function splitOrders(text) {
   // Strip WhatsApp forward headers
-  let t = text.replace(/\[\d{2}\/\d{2},\s*\d{2}:\d{2}\]\s*[^:]+:\s*/g, '\n').trim();
+  let t = text.replace(/\[\d{1,2}\/\d{1,2}(?:\/\d{2,4})?[,\s]+\d{1,2}:\d{2}(?::\d{2})?(?:\s*[APap][Mm])?\]\s*[^:\n]+:\s*/g, '\n').trim();
 
   // 1. Split on #number — when orders have explicit numbers, this is definitive
   // Each #N at start of line = exactly one order. Don't apply any other logic.
@@ -300,7 +301,7 @@ async function handleMessage(from, text) {
   }
 
   // ── Strip forward headers before checking ──
-  const stripped = text.replace(/\[\d{2}\/\d{2},\s*\d{2}:\d{2}\]\s*[^:]+:\s*/g, '\n').trim();
+  const stripped = text.replace(/\[\d{1,2}\/\d{1,2}(?:\/\d{2,4})?[,\s]+\d{1,2}:\d{2}(?::\d{2})?(?:\s*[APap][Mm])?\]\s*[^:\n]+:\s*/g, '\n').trim();
 
   // ── Pre-check: looks like an order? ──
   const looksLikeOrder = /^#\d+/m.test(stripped) || /0[789]\d{9}/.test(stripped) || /\+234/.test(stripped);
@@ -551,6 +552,118 @@ async function handleListCommand(from) {
   msg += `\n━━━━━━━━━━━━━━━━━━━━`;
   await send(from, msg);
 }
+
+// ── PASTE ORDERS (dashboard direct paste) ─────────────────────
+app.post('/parse-orders', async (req, res) => {
+  if (!req.body?.text) return res.status(400).json({ error: 'text required' });
+
+  let { text, captain } = req.body;
+
+  // Captain field works identically to "Captain: Name" prefix in the bot
+  if (captain?.trim()) {
+    text = `Captain: ${captain.trim()}\n${text}`;
+  }
+
+  const stripped = text.replace(/\[\d{1,2}\/\d{1,2}(?:\/\d{2,4})?[,\s]+\d{1,2}:\d{2}(?::\d{2})?(?:\s*[APap][Mm])?\]\s*[^:\n]+:\s*/g, '\n').trim();
+
+  const captainSections = splitByCaptain(stripped);
+  const hasCaptainPrefix = captainSections.some(s => s.captain);
+  const captains = hasCaptainPrefix ? await getCaptains() : [];
+
+  const allBlocks = [];
+  const warnings = [];
+  for (const section of captainSections) {
+    let matchedCaptain = null;
+    if (section.captain) {
+      matchedCaptain = fuzzyMatchCaptain(section.captain, captains);
+      if (!matchedCaptain) {
+        warnings.push(`Captain "${section.captain}" not recognised — orders saved unassigned. Known: ${captains.slice(0, 5).join(', ')}`);
+      }
+    }
+    if (!section.text) continue;
+    for (const block of splitOrders(section.text)) {
+      allBlocks.push({ block, captain: matchedCaptain });
+    }
+  }
+
+  const today = watDate();
+  const results = { saved: [], duplicates: [], failed: [], warnings };
+  const seenInBatch = new Set();
+  let nextNum = await getNextOrderNumberStart(today);
+
+  for (const { block, captain: blockCaptain } of allBlocks) {
+    const cleanBlock = block
+      .replace(/@\S+/g, '')
+      .replace(/after pickup you deliver with below info/gi, '')
+      .replace(/treat as urgent[^\n]*/gi, '')
+      .replace(/^\s*\n+/, '')
+      .trim();
+
+    console.log(`\n📦 [dashboard][${blockCaptain || 'unassigned'}] "${cleanBlock.slice(0, 60).replace(/\n/g, ' ')}..."`);
+    const result = await parseOrder(cleanBlock);
+
+    if (!result.success) {
+      results.failed.push(block.split('\n')[0].trim().slice(0, 60));
+      continue;
+    }
+
+    const order = result.data;
+
+    if (!order.customer_phone1 && !order.customer_name && !order.amount) {
+      console.warn('⚠️ Empty parse result:', cleanBlock.slice(0, 80));
+      results.failed.push(block.split('\n')[0].trim().slice(0, 40));
+      continue;
+    }
+
+    order.raw_text = block;
+    order.force_captain = blockCaptain;
+
+    const batchKey = `${order.customer_phone1}|${(order.product || '').split(' ')[0]}`;
+    if (seenInBatch.has(batchKey)) {
+      results.duplicates.push({ customer_name: order.customer_name, customer_phone1: order.customer_phone1, product: order.product });
+      continue;
+    }
+    seenInBatch.add(batchKey);
+
+    order.staff_phone = 'dashboard';
+    order.status = 'pending';
+    if (!order.customer_name?.trim()) order.customer_name = 'Unknown';
+    if (!order.zone || order.zone === '**') {
+      order.zone = 'UNASSIGNED';
+      order.is_outside_abuja = true;
+    }
+
+    if (!order.order_number) {
+      order.suggested_number = String(nextNum);
+      nextNum++;
+    }
+
+    const saved = await saveOrder(order);
+
+    if (saved && saved.success) {
+      order.order_number = saved.orderNumber;
+      if (order.suggested_number) {
+        const usedNum = parseInt(saved.orderNumber);
+        if (!isNaN(usedNum) && usedNum >= nextNum) nextNum = usedNum + 1;
+      }
+      results.saved.push({
+        order_number: order.order_number,
+        customer_name: order.customer_name,
+        zone: order.zone,
+        captain: order.force_captain || null,
+        product: order.product,
+        amount: order.amount,
+        is_outside_abuja: order.is_outside_abuja,
+      });
+    } else if (saved === 'duplicate') {
+      results.duplicates.push({ customer_name: order.customer_name, customer_phone1: order.customer_phone1, product: order.product });
+    } else {
+      results.failed.push(`#${order.order_number || '?'} ${order.customer_name || ''}`.trim());
+    }
+  }
+
+  res.json(results);
+});
 
 // ── START ─────────────────────────────────────────────────────
 const PORT = process.env.PORT || 3000;
