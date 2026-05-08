@@ -1,16 +1,25 @@
 require('dotenv').config();
+const path = require('path');
 const express = require('express');
 const { parseOrder } = require('./parser');
 const { saveOrder, getNextOrderNumberStart, assignCaptain } = require('./db');
 const { send: sendMeta }   = require('./whatsapp');
 const { send: sendTwilio } = require('./whatsapp-twilio');
-const {send: sendWhapi} = require('./whatsapp-whapi');
+const { send: sendWhapi } = require('./whatsapp-whapi');
 const { createClient } = require('@supabase/supabase-js');
 
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false })); // required for Twilio form-data webhooks
 app.use(express.static('public'));
+
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'dashboard.html'));
+});
+
+app.get('/dashboard', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'dashboard.html'));
+});
 
 // Defaults to Twilio — set PROVIDER=meta in .env to fall back to Meta
 const PROVIDER = (process.env.PROVIDER || 'twilio').toLowerCase();
