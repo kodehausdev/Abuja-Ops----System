@@ -649,7 +649,7 @@ tr:hover td { background: rgba(255,255,255,.02); }
     <button class="btn-print" id="btn-slips" onclick="printSlips()">🖨 Slips</button>
     <button class="btn-print" id="btn-cat" onclick="printCatalogue()">🖨 Catalogue</button>
     <button class="btn-print" id="btn-byc" onclick="showCaptainPicker()">🖨 By Captain</button>
-    <!-- <button id="btn-paste-orders" onclick="showPasteOrders()" style="display:none;background:var(--green-bg);border:1px solid var(--green-dim);color:var(--green);border-radius:7px;padding:6px 14px;font-size:12px;cursor:pointer;margin-right:4px;font-family:var(--body);">📥 Paste Orders</button> -->
+    <button id="btn-paste-orders" onclick="showPasteOrders()" style="display:none;background:var(--green-bg);border:1px solid var(--green-dim);color:var(--green);border-radius:7px;padding:6px 14px;font-size:12px;cursor:pointer;margin-right:4px;font-family:var(--body);">📥 Paste Orders</button>
     <button class="btn-refresh" onclick="showAttendance()" style="margin-right:4px;">👥 Attendance</button>
     <button class="btn-refresh" onclick="showActivityLog()" style="margin-right:4px;">📋 Activity</button>
     <button id="btn-settings" onclick="showSettings()" style="margin-right:4px;display:none;">⚙️ Settings</button>
@@ -960,23 +960,44 @@ let SUPABASE_KEY = '';
 
 // Fetch config from server — no hardcoded keys in frontend
 async function loadConfig() {
-  try {
-    const r = await fetch('/config');
-    if (!r.ok) throw new Error('no server');
-    const cfg = await r.json();
+  async function fetchConfig(url) {
+    try {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`status=${res.status}`);
+      return await res.json();
+    } catch (err) {
+      console.warn(`Config fetch failed from ${url}:`, err.message);
+      return null;
+    }
+  }
+
+  let cfg = await fetchConfig('/config');
+  if (!cfg) {
+    const fallbackUrls = [
+      'http://localhost:3000/config',
+      'http://127.0.0.1:3000/config'
+    ];
+    for (const url of fallbackUrls) {
+      if (cfg) break;
+      cfg = await fetchConfig(url);
+    }
+  }
+
+  if (cfg) {
     SUPABASE_URL = cfg.supabaseUrl;
     SUPABASE_KEY = cfg.supabaseKey;
-    // Only merge server emails if they exist and we're on Express
     if (cfg.opsEmails?.length) {
       cfg.opsEmails.forEach(e => {
         if (!OPS_EMAILS.includes(e.toLowerCase())) OPS_EMAILS.push(e.toLowerCase());
       });
     }
-  } catch(e) {
-    // Static hosting (Netlify) — use hardcoded values above
-    SUPABASE_URL = 'https://cnibkphbjautasggyiia.supabase.co';
-    SUPABASE_KEY = 'sb_publishable_mUKU80NAIYmS1Gk-S22nAQ_JMZNp1BJ';
+    return;
   }
+
+  showToast('⚠️ Could not load server config; using embedded Supabase values. Run the backend on port 3000 and open the dashboard from that server for full support.');
+  // Static hosting or local file preview — use hardcoded values
+  SUPABASE_URL = 'https://cnibkphbjautasggyiia.supabase.co';
+  SUPABASE_KEY = 'sb_publishable_mUKU80NAIYmS1Gk-S22nAQ_JMZNp1BJ';
 }
 
 let allOrders = [];
@@ -992,21 +1013,38 @@ document.getElementById('date-display').textContent =
 const todayISO = new Date(Date.now() + 60*60*1000).toISOString().split('T')[0]; // WAT
 document.getElementById('f-date').value = todayISO;
 
+async function getHeaders() {
+  const headers = { 'apikey': SUPABASE_KEY };
+  if (_supaAuth?.auth?.getSession) {
+    try {
+      const { data: { session } } = await _supaAuth.auth.getSession();
+      if (session?.access_token) {
+        headers['Authorization'] = `Bearer ${session.access_token}`;
+      } else {
+        headers['Authorization'] = `Bearer ${SUPABASE_KEY}`;
+      }
+    } catch (err) {
+      console.warn('Could not get supabase session:', err.message);
+      headers['Authorization'] = `Bearer ${SUPABASE_KEY}`;
+    }
+  } else {
+    headers['Authorization'] = `Bearer ${SUPABASE_KEY}`;
+  }
+  return headers;
+}
+
 async function api(path) {
-  const r = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
-    headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` }
-  });
+  const headers = await getHeaders();
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, { headers });
   return r.json();
 }
 
 async function apiCount(path) {
+  const headers = await getHeaders();
+  headers['Prefer'] = 'count=exact';
   const r = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
     method: 'HEAD',
-    headers: {
-      'apikey': SUPABASE_KEY,
-      'Authorization': `Bearer ${SUPABASE_KEY}`,
-      'Prefer': 'count=exact'
-    }
+    headers
   });
   const contentRange = r.headers.get('content-range') || '';
   const total = Number(contentRange.split('/')[1] || 0);
@@ -1015,14 +1053,12 @@ async function apiCount(path) {
 
 async function patch(id, data) {
   if (!canWrite) { showToast('🔒 Sign in with an authorised account to make changes'); return; }
+  const headers = await getHeaders();
+  headers['Content-Type'] = 'application/json';
+  headers['Prefer'] = 'return=minimal';
   await fetch(`${SUPABASE_URL}/rest/v1/orders?id=eq.${id}`, {
     method: 'PATCH',
-    headers: {
-      'apikey': SUPABASE_KEY,
-      'Authorization': `Bearer ${SUPABASE_KEY}`,
-      'Content-Type': 'application/json',
-      'Prefer': 'return=minimal'
-    },
+    headers,
     body: JSON.stringify(data)
   });
 }
@@ -1040,6 +1076,7 @@ async function loadOrders() {
       now.toLocaleDateString('en-NG', { weekday:'short', day:'numeric', month:'short', year:'numeric' }) +
       '  ·  Updated ' + new Date().toLocaleTimeString('en-NG', { hour:'2-digit', minute:'2-digit' });
   } catch(e) {
+    console.error('loadOrders error:', e);
     showToast('⚠️ Could not load orders');
   }
 }
@@ -2212,6 +2249,7 @@ const OPS_EMAILS = [
 
 let currentUser = null;
 let canWrite    = false;
+let editingId   = null;
 let _supaAuth   = null;
 
 async function initAuth() {
@@ -2224,12 +2262,38 @@ async function initAuth() {
     });
   }
   _supaAuth = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-  const { data: { session } } = await _supaAuth.auth.getSession();
-  if (session?.user) handleAuthUser(session.user);
+
+  let sessionData = null;
+  try {
+    const { data: { session } } = await _supaAuth.auth.getSession();
+    sessionData = session;
+  } catch (err) {
+    console.warn('Could not get session:', err.message);
+  }
+
+  if (!sessionData && (window.location.search.includes('access_token') || window.location.hash.includes('access_token'))) {
+    try {
+      const { data: { session } } = await _supaAuth.auth.getSessionFromUrl();
+      sessionData = session;
+    } catch (err) {
+      console.warn('Could not get session from URL:', err.message);
+    }
+  }
+
+  if (sessionData?.user) handleAuthUser(sessionData.user);
   _supaAuth.auth.onAuthStateChange((_e, s) => {
     if (s?.user) handleAuthUser(s.user);
     else handleSignOut();
   });
+}
+
+function setElementDisplay(id, value) {
+  const el = document.getElementById(id);
+  if (el) {
+    el.style.display = value;
+  } else {
+    console.warn(`Dashboard element not found: ${id}`);
+  }
 }
 
 function handleAuthUser(user) {
@@ -2237,23 +2301,24 @@ function handleAuthUser(user) {
   const email = user.email?.toLowerCase();
   canWrite = OPS_EMAILS.map(e=>e.toLowerCase()).includes(email);
   console.log('Auth user:', email, '| canWrite:', canWrite, '| OPS_EMAILS:', OPS_EMAILS);
-  document.getElementById('btn-signin').style.display = 'none';
-  document.getElementById('btn-settings').style.display = canWrite ? 'inline-flex' : 'none';
-  document.getElementById('btn-paste-orders').style.display = canWrite ? 'inline-flex' : 'none';
-  const au = document.getElementById('auth-user');
-  au.style.display = 'flex';
-  document.getElementById('auth-name').textContent = user.user_metadata?.full_name || user.email;
-  document.getElementById('auth-avatar').src = user.user_metadata?.avatar_url || '';
+  setElementDisplay('btn-signin', 'none');
+  setElementDisplay('btn-settings', canWrite ? 'inline-flex' : 'none');
+  setElementDisplay('btn-paste-orders', canWrite ? 'inline-flex' : 'none');
+  setElementDisplay('auth-user', 'flex');
+  const authName = document.getElementById('auth-name');
+  if (authName) authName.textContent = user.user_metadata?.full_name || user.email;
+  const authAvatar = document.getElementById('auth-avatar');
+  if (authAvatar) authAvatar.src = user.user_metadata?.avatar_url || '';
   updateWriteAccess();
   showToast(canWrite ? `✅ ${email} — write access` : `👁️ ${email} — view only (not in ops list)`);
 }
 
 function handleSignOut() {
   currentUser = null; canWrite = false;
-  document.getElementById('btn-signin').style.display = 'flex';
-  document.getElementById('btn-settings').style.display = 'none';
-  document.getElementById('btn-paste-orders').style.display = 'none';
-  document.getElementById('auth-user').style.display = 'none';
+  setElementDisplay('btn-signin', 'flex');
+  setElementDisplay('btn-settings', 'none');
+  setElementDisplay('btn-paste-orders', 'none');
+  setElementDisplay('auth-user', 'none');
   updateWriteAccess();
 }
 
@@ -2331,13 +2396,11 @@ async function deleteOrder(id) {
   const o = allOrders.find(x => x.id === id);
   const label = o ? `#${o.order_number} ${o.customer_name || ''}`.trim() : `#${id}`;
   if (!confirm(`Delete order ${label}?\n\nThis cannot be undone.`)) return;
+  const headers = await getHeaders();
+  headers['Prefer'] = 'return=minimal';
   await fetch(`${SUPABASE_URL}/rest/v1/orders?id=eq.${id}`, {
     method: 'DELETE',
-    headers: {
-      'apikey': SUPABASE_KEY,
-      'Authorization': `Bearer ${SUPABASE_KEY}`,
-      'Prefer': 'return=minimal'
-    }
+    headers
   });
   allOrders = allOrders.filter(x => x.id !== id);
   if (editingId === id) closeEdit();
