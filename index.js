@@ -11,10 +11,10 @@ const { createClient } = require('@supabase/supabase-js');
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false })); // required for Twilio form-data webhooks
-app.use(express.static('public'));
+app.use(express.static('public', { index: false }));
 
 app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'dashboard.html'));
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 app.get('/dashboard', (req, res) => {

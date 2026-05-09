@@ -649,7 +649,7 @@ tr:hover td { background: rgba(255,255,255,.02); }
     <button class="btn-print" id="btn-slips" onclick="printSlips()">🖨 Slips</button>
     <button class="btn-print" id="btn-cat" onclick="printCatalogue()">🖨 Catalogue</button>
     <button class="btn-print" id="btn-byc" onclick="showCaptainPicker()">🖨 By Captain</button>
-    <!-- <button id="btn-paste-orders" onclick="showPasteOrders()" style="display:none;background:var(--green-bg);border:1px solid var(--green-dim);color:var(--green);border-radius:7px;padding:6px 14px;font-size:12px;cursor:pointer;margin-right:4px;font-family:var(--body);">📥 Paste Orders</button> -->
+    <button id="btn-paste-orders" onclick="showPasteOrders()" style="display:none;background:var(--green-bg);border:1px solid var(--green-dim);color:var(--green);border-radius:7px;padding:6px 14px;font-size:12px;cursor:pointer;margin-right:4px;font-family:var(--body);">📥 Paste Orders</button>
     <button class="btn-refresh" onclick="showAttendance()" style="margin-right:4px;">👥 Attendance</button>
     <button class="btn-refresh" onclick="showActivityLog()" style="margin-right:4px;">📋 Activity</button>
     <button id="btn-settings" onclick="showSettings()" style="margin-right:4px;display:none;">⚙️ Settings</button>
@@ -908,6 +908,47 @@ tr:hover td { background: rgba(255,255,255,.02); }
   </div>
 </div>
 
+<!-- Paste Orders Modal -->
+<div id="paste-orders-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:300;align-items:flex-start;justify-content:center;padding-top:60px;overflow-y:auto;">
+  <div style="background:var(--card);border:1px solid var(--border2);border-radius:14px;width:600px;max-width:95vw;display:flex;flex-direction:column;">
+    <div style="padding:18px 24px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-shrink:0;">
+      <div>
+        <div style="font-family:var(--display);font-weight:700;font-size:15px;">📥 Paste Orders</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:3px;">Temporary replacement while WhatsApp bot is unavailable</div>
+      </div>
+      <button onclick="closePasteOrders(false)" style="background:none;border:none;color:var(--muted);font-size:18px;cursor:pointer;">✕</button>
+    </div>
+
+    <!-- Input form -->
+    <div id="paste-form" style="padding:20px 24px;display:flex;flex-direction:column;gap:14px;">
+      <div>
+        <div style="font-family:var(--mono);font-size:9px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:6px;">Captain (optional)</div>
+        <input id="paste-captain" type="text" placeholder="e.g. Abdul — leave blank if not assigning a captain"
+          style="width:100%;background:var(--surface);border:1px solid var(--border2);color:var(--text);border-radius:7px;padding:8px 12px;font-family:var(--body);font-size:12px;outline:none;"
+          onfocus="this.style.borderColor='var(--green-dim)'"
+          onblur="this.style.borderColor='var(--border2)'"/>
+      </div>
+      <div>
+        <div style="font-family:var(--mono);font-size:9px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:6px;">Orders — paste raw text here (any format)</div>
+        <textarea id="paste-text" rows="14" placeholder="Paste one or multiple orders here — same formats the bot handles."
+          style="width:100%;background:var(--surface);border:1px solid var(--border2);color:var(--text);border-radius:7px;padding:10px 12px;font-family:var(--mono);font-size:11px;outline:none;resize:vertical;line-height:1.5;"
+          onfocus="this.style.borderColor='var(--green-dim)'"
+          onblur="this.style.borderColor='var(--border2)'"></textarea>
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:10px;">
+        <button onclick="closePasteOrders(false)" style="background:var(--border);border:1px solid var(--border2);color:var(--muted2);border-radius:8px;padding:8px 18px;font-family:var(--body);font-size:12px;cursor:pointer;">Cancel</button>
+        <button id="paste-btn" onclick="processOrders()" style="background:var(--green-dim);border:1px solid var(--green-dim);color:#fff;border-radius:8px;padding:8px 20px;font-family:var(--body);font-size:12px;cursor:pointer;font-weight:600;">Process Orders</button>
+      </div>
+    </div>
+
+    <!-- Results -->
+    <div id="paste-results" style="display:none;padding:20px 24px;max-height:60vh;overflow-y:auto;"></div>
+    <div id="paste-results-footer" style="display:none;padding:14px 24px;border-top:1px solid var(--border);display:none;justify-content:flex-end;">
+      <button onclick="closePasteOrders(true)" style="background:var(--green-dim);border:1px solid var(--green-dim);color:#fff;border-radius:8px;padding:8px 20px;font-family:var(--body);font-size:12px;cursor:pointer;font-weight:600;">Close & Refresh</button>
+    </div>
+  </div>
+</div>
+
 <!-- Hidden print area -->
 <div id="print-area" style="display:none;"></div>
 
@@ -919,12 +960,13 @@ let SUPABASE_KEY = '';
 
 // Fetch config from server — no hardcoded keys in frontend
 async function loadConfig() {
-    try {
+  try {
     const r = await fetch('/config');
     if (!r.ok) throw new Error('no server');
     const cfg = await r.json();
     SUPABASE_URL = cfg.supabaseUrl;
     SUPABASE_KEY = cfg.supabaseKey;
+    // Only merge server emails if they exist and we're on Express
     if (cfg.opsEmails?.length) {
       cfg.opsEmails.forEach(e => {
         if (!OPS_EMAILS.includes(e.toLowerCase())) OPS_EMAILS.push(e.toLowerCase());
@@ -932,13 +974,12 @@ async function loadConfig() {
     }
   } catch(e) {
     // Static hosting (Netlify) — use hardcoded values above
-  SUPABASE_URL = 'https://cnibkphbjautasggyiia.supabase.co';
-  SUPABASE_KEY = 'sb_publishable_mUKU80NAIYmS1Gk-S22nAQ_JMZNp1BJ';
+    SUPABASE_URL = 'https://cnibkphbjautasggyiia.supabase.co';
+    SUPABASE_KEY = 'sb_publishable_mUKU80NAIYmS1Gk-S22nAQ_JMZNp1BJ';
   }
 }
 
 let allOrders = [];
-let totalOrdersCount = 0;
 let currentView = 'table';
 
 // Set date display and default filter
@@ -955,20 +996,6 @@ async function api(path) {
     headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` }
   });
   return r.json();
-}
-
-async function apiCount(path) {
-  const r = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
-    method: 'HEAD',
-    headers: {
-      'apikey': SUPABASE_KEY,
-      'Authorization': `Bearer ${SUPABASE_KEY}`,
-      'Prefer': 'count=exact'
-    }
-  });
-  const contentRange = r.headers.get('content-range') || '';
-  const count = Number(contentRange.split('/')[1] || 0);
-  return Number.isFinite(count) ? count : 0;
 }
 
 async function patch(id, data) {
@@ -989,12 +1016,6 @@ async function loadOrders() {
   try {
     const data = await api('orders?select=id,order_number,raw_text,partner_name,customer_name,customer_phone1,customer_phone2,product,amount,raw_address,zone,verified,status,payment_method,report,order_date,created_at,closer_name,closer_phone,dispatcher_name,updated_by&order=order_date.desc,created_at.asc&limit=500');
     allOrders = Array.isArray(data) ? data : [];
-    totalOrdersCount = allOrders.length;
-    try {
-      totalOrdersCount = await apiCount('orders?select=id');
-    } catch (countError) {
-      console.warn('Could not load total order count, falling back to loaded count:', countError);
-    }
     updateStats();
     populateFilters();
     populateCaptainFilter();
@@ -1003,7 +1024,6 @@ async function loadOrders() {
       now.toLocaleDateString('en-NG', { weekday:'short', day:'numeric', month:'short', year:'numeric' }) +
       '  ·  Updated ' + new Date().toLocaleTimeString('en-NG', { hour:'2-digit', minute:'2-digit' });
   } catch(e) {
-    console.error('loadOrders error:', e);
     showToast('⚠️ Could not load orders');
   }
 }
@@ -1017,7 +1037,7 @@ function updateStats() {
   const zones     = new Set(todayOrders.map(o => o.zone).filter(Boolean)).size;
   const revenue   = todayOrders.reduce((s, o) => s + (Number(o.amount) || 0), 0);
 
-  document.getElementById('s-total').textContent   = totalOrdersCount;
+  document.getElementById('s-total').textContent   = allOrders.length;
   document.getElementById('s-today').textContent   = todayOrders.length;
   document.getElementById('s-pending').textContent = pending;
   document.getElementById('s-done').textContent    = delivered;
@@ -2176,7 +2196,6 @@ const OPS_EMAILS = [
 
 let currentUser = null;
 let canWrite    = false;
-let editingId   = null;
 let _supaAuth   = null;
 
 async function initAuth() {
@@ -2189,7 +2208,7 @@ async function initAuth() {
     });
   }
   _supaAuth = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-    const { data: { session } } = await _supaAuth.auth.getSession();
+  const { data: { session } } = await _supaAuth.auth.getSession();
   if (session?.user) handleAuthUser(session.user);
   _supaAuth.auth.onAuthStateChange((_e, s) => {
     if (s?.user) handleAuthUser(s.user);
@@ -2204,7 +2223,7 @@ function handleAuthUser(user) {
   console.log('Auth user:', email, '| canWrite:', canWrite, '| OPS_EMAILS:', OPS_EMAILS);
   document.getElementById('btn-signin').style.display = 'none';
   document.getElementById('btn-settings').style.display = canWrite ? 'inline-flex' : 'none';
-  // document.getElementById('btn-paste-orders').style.display = canWrite ? 'inline-flex' : 'none';
+  document.getElementById('btn-paste-orders').style.display = canWrite ? 'inline-flex' : 'none';
   const au = document.getElementById('auth-user');
   au.style.display = 'flex';
   document.getElementById('auth-name').textContent = user.user_metadata?.full_name || user.email;
@@ -2217,7 +2236,7 @@ function handleSignOut() {
   currentUser = null; canWrite = false;
   document.getElementById('btn-signin').style.display = 'flex';
   document.getElementById('btn-settings').style.display = 'none';
-  // document.getElementById('btn-paste-orders').style.display = 'none';
+  document.getElementById('btn-paste-orders').style.display = 'none';
   document.getElementById('auth-user').style.display = 'none';
   updateWriteAccess();
 }
@@ -2340,15 +2359,116 @@ document.getElementById('edit-modal').addEventListener('click', function(e) {
   if (e.target === this) closeEdit();
 });
 
-// Paste orders feature is disabled for Railway deployment.
-// document.getElementById('paste-orders-modal').addEventListener('click', function(e) {
-//   if (e.target === this) closePasteOrders(false);
-// });
+document.getElementById('paste-orders-modal').addEventListener('click', function(e) {
+  if (e.target === this) closePasteOrders(false);
+});
 
 // ── PASTE ORDERS ──────────────────────────────────────────────
-// function showPasteOrders() { /* disabled */ }
-// function closePasteOrders(reload) { /* disabled */ }
-// async function processOrders() { /* disabled */ }
+
+function showPasteOrders() {
+  if (!canWrite) { showToast('🔒 Sign in to paste orders'); return; }
+  // Reset form state
+  document.getElementById('paste-captain').value = '';
+  document.getElementById('paste-text').value = '';
+  document.getElementById('paste-form').style.display = 'flex';
+  document.getElementById('paste-form').style.flexDirection = 'column';
+  document.getElementById('paste-form').style.gap = '14px';
+  document.getElementById('paste-results').style.display = 'none';
+  document.getElementById('paste-results').innerHTML = '';
+  document.getElementById('paste-results-footer').style.display = 'none';
+  const btn = document.getElementById('paste-btn');
+  btn.disabled = false;
+  btn.textContent = 'Process Orders';
+  document.getElementById('paste-orders-modal').style.display = 'flex';
+}
+
+function closePasteOrders(reload) {
+  document.getElementById('paste-orders-modal').style.display = 'none';
+  if (reload) loadOrders();
+}
+
+async function processOrders() {
+  if (!canWrite) { showToast('🔒 Sign in to paste orders'); return; }
+  const text = document.getElementById('paste-text').value.trim();
+  if (!text) { showToast('⚠️ Paste some orders first'); return; }
+
+  const captain = document.getElementById('paste-captain').value.trim();
+  const btn = document.getElementById('paste-btn');
+  btn.disabled = true;
+  btn.textContent = '⏳ Processing...';
+
+  try {
+    const r = await fetch('/parse-orders', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, ...(captain ? { captain } : {}) })
+    });
+    if (!r.ok) throw new Error('Server error ' + r.status);
+    const data = await r.json();
+
+    document.getElementById('paste-form').style.display = 'none';
+
+    let html = '';
+
+    if (data.warnings?.length) {
+      html += `<div style="background:var(--amber-bg);border:1px solid rgba(245,158,11,.2);border-radius:8px;padding:12px 14px;margin-bottom:14px;">`;
+      html += data.warnings.map(w => `<div style="font-size:11px;color:var(--amber);">⚠️ ${w}</div>`).join('');
+      html += `</div>`;
+    }
+
+    if (data.saved.length) {
+      html += `<div style="margin-bottom:14px;">
+        <div style="font-family:var(--mono);font-size:9px;text-transform:uppercase;letter-spacing:1px;color:var(--green);margin-bottom:8px;">✅ ${data.saved.length} Saved</div>`;
+      for (const o of data.saved) {
+        const outside = o.is_outside_abuja ? ' ⚠️' : '';
+        html += `<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--green-bg);border:1px solid rgba(34,197,94,.15);border-radius:7px;margin-bottom:5px;">
+          <span style="font-family:var(--mono);font-size:12px;color:var(--green);white-space:nowrap;">#${o.order_number}</span>
+          <span style="flex:1;font-size:12px;">${o.customer_name}</span>
+          <span style="font-family:var(--mono);font-size:10px;color:var(--muted2);white-space:nowrap;">${o.zone}${outside}</span>
+          ${o.captain ? `<span style="font-family:var(--mono);font-size:10px;color:#60a5fa;white-space:nowrap;">🚴 ${o.captain}</span>` : ''}
+        </div>`;
+      }
+      html += `</div>`;
+    }
+
+    if (data.duplicates.length) {
+      html += `<div style="margin-bottom:14px;">
+        <div style="font-family:var(--mono);font-size:9px;text-transform:uppercase;letter-spacing:1px;color:var(--amber);margin-bottom:8px;">⚠️ ${data.duplicates.length} Duplicate${data.duplicates.length > 1 ? 's' : ''} Skipped</div>`;
+      for (const o of data.duplicates) {
+        html += `<div style="padding:7px 12px;background:var(--amber-bg);border:1px solid rgba(245,158,11,.15);border-radius:7px;margin-bottom:5px;font-size:11px;color:var(--amber);">${o.customer_name} (${o.customer_phone1 || 'no phone'}) — ${(o.product || '').slice(0, 40)}</div>`;
+      }
+      html += `<div style="font-size:10px;color:var(--muted);margin-top:4px;">Same phone + product already saved today. Add manually via ✏️ if it's a genuine new order.</div>`;
+      html += `</div>`;
+    }
+
+    if (data.failed.length) {
+      html += `<div style="margin-bottom:14px;">
+        <div style="font-family:var(--mono);font-size:9px;text-transform:uppercase;letter-spacing:1px;color:var(--red);margin-bottom:8px;">❌ ${data.failed.length} Failed to Parse</div>`;
+      for (const f of data.failed) {
+        html += `<div style="padding:7px 12px;background:var(--red-bg);border:1px solid rgba(239,68,68,.15);border-radius:7px;margin-bottom:5px;font-size:11px;color:var(--red);">${f}</div>`;
+      }
+      html += `</div>`;
+    }
+
+    if (!data.saved.length && !data.duplicates.length && !data.failed.length) {
+      html += `<div style="text-align:center;padding:40px 20px;color:var(--muted);">
+        <div style="font-size:24px;margin-bottom:10px;opacity:.4;">📦</div>
+        <div>No orders found in the pasted text.</div>
+      </div>`;
+    }
+
+    const resultsEl = document.getElementById('paste-results');
+    resultsEl.innerHTML = html;
+    resultsEl.style.display = 'block';
+    document.getElementById('paste-results-footer').style.display = 'flex';
+
+  } catch (e) {
+    console.error('processOrders error:', e);
+    showToast('❌ Failed to process — is the server running?');
+    btn.disabled = false;
+    btn.textContent = 'Process Orders';
+  }
+}
 
 // Boot sequence — load config first, then auth and data
 (async () => {
