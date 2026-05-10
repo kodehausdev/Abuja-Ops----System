@@ -49,24 +49,24 @@ async function saveOrder(order) {
   // ── Duplicate order_number check — scoped per captain ──
   // Abdul's #5 and Anita's #5 are different orders — no conflict.
   // Only block if the SAME captain already has this number today with a different customer.
-  if (orderNum) {
-    const captainForCheck = order.force_captain || null;
-    let dupQuery = supabase
-      .from('orders')
-      .select('id, customer_name')
-      .eq('order_number', orderNum)
-      .eq('order_date', today);
-    if (captainForCheck) {
-      dupQuery = dupQuery.eq('dispatcher_name', captainForCheck);
-    }
-    const { data: numDup } = await dupQuery.limit(1);
-    if (numDup && numDup.length > 0) {
-      // Same captain already has this #number → reassign to global max+1
-      const nextAvailable = await getNextOrderNumber(today);
-      console.log(`📝 #${orderNum} already used by ${captainForCheck || 'unassigned'} → reassigning to #${nextAvailable}`);
-      orderNum = nextAvailable;
-    }
+// ── Duplicate order_number check — ONLY when captain is explicitly assigned ──
+// Multiple sellers can each have their own #1, #2 etc — that's fine and expected.
+// Only enforce uniqueness within a specific captain's run.
+if (orderNum && order.force_captain) {
+  const { data: numDup } = await supabase
+    .from('orders')
+    .select('id')
+    .eq('order_number', orderNum)
+    .eq('order_date', today)
+    .eq('dispatcher_name', order.force_captain)
+    .limit(1);
+
+  if (numDup && numDup.length > 0) {
+    const nextAvailable = await getNextOrderNumber(today);
+    console.log(`📝 #${orderNum} already used by ${order.force_captain} → reassigning to #${nextAvailable}`);
+    orderNum = nextAvailable;
   }
+}
 
   // ── True duplicate: same phone + same product + same day → block ──
   if (order.customer_phone1 && order.product) {
