@@ -933,7 +933,7 @@ async function loadConfig() {
   } catch(e) {
     // Static hosting (Netlify) — use hardcoded values above
   SUPABASE_URL = 'https://cnibkphbjautasggyiia.supabase.co';
-  SUPABASE_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNuaWJrcGhiamF1dGFzZ2d5aWlhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjM5NzMzOTEsImV4cCI6MjA3OTU0OTM5MX0.aelyGIGss3UpELnnNyb9guOKJ6M3ufA42kJGg9mJ_RU'
+  SUPABASE_KEY = 'sb_publishable_mUKU80NAIYmS1Gk-S22nAQ_JMZNp1BJ';
   }
 }
 
@@ -2295,37 +2295,20 @@ function closeEdit() {
 async function deleteOrder(id) {
   const o = allOrders.find(x => x.id === id);
   const label = o ? `#${o.order_number} ${o.customer_name || ''}`.trim() : `#${id}`;
-  
   if (!confirm(`Delete order ${label}?\n\nThis cannot be undone.`)) return;
-
-  try {
-    const response = await fetch(`${SUPABASE_URL}/rest/v1/orders?id=eq.${id}`, {
-      method: 'DELETE',
-      headers: {
-        'apikey': SUPABASE_KEY,
-        // REMOVED the Authorization Bearer line
-        'Prefer': 'return=minimal'
-      }
-    });
-
-    if (!response.ok) {
-      const errData = await response.json();
-      throw new Error(errData.message || 'Server rejected delete');
+  await fetch(`${SUPABASE_URL}/rest/v1/orders?id=eq.${id}`, {
+    method: 'DELETE',
+    headers: {
+      'apikey': SUPABASE_KEY,
+      'Authorization': `Bearer ${SUPABASE_KEY}`,
+      'Prefer': 'return=minimal'
     }
-
-    // Only update UI if the server request actually worked
-    allOrders = allOrders.filter(x => x.id !== id);
-    if (editingId === id) closeEdit();
-    renderTable();
-    showToast(`🗑 Order ${label} deleted`);
-
-  } catch (err) {
-    console.error("Delete failed:", err);
-    alert("Could not delete from database: " + err.message);
-    // Don't remove from UI if it failed!
-  }
+  });
+  allOrders = allOrders.filter(x => x.id !== id);
+  if (editingId === id) closeEdit();
+  renderTable();
+  showToast(`🗑 Order ${label} deleted`);
 }
-
 
 async function saveEdit() {
   if (!editingId) return;
