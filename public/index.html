@@ -1377,7 +1377,6 @@ function printCatalogue() {
       <thead>
         <tr>
           <th style="width:28px">No</th>
-          <th style="width:22px">SN</th>
           <th style="width:95px">Seller Name</th>
           <th>Customers Name</th>
           <th>Products</th>
@@ -1394,8 +1393,7 @@ function printCatalogue() {
   for (const [zone, zoneOrders] of Object.entries(byZone).sort()) {
     for (const o of zoneOrders.sort(sortByOrderNumber)) {
       html += `<tr>
-        <td style="color:#888;font-size:8px">#${o.order_number||'—'}</td>
-        <td style="text-align:center">${sn++}</td>
+        <td style="color:#888;font-size:10px"><strong>#${o.order_number||'—'}</strong></td>
         <td>${o.partner_name||'—'}</td>
         <td>
           <strong>${o.customer_name||'Unknown'}</strong>
@@ -1751,7 +1749,6 @@ function printByCaptain(selectedCaptains) {
           <thead>
             <tr>
               <th style="width:28px">No</th>
-              <th style="width:22px">SN</th>
               <th style="width:95px">Seller Name</th>
               <th>Customers Name</th>
               <th>Products</th>
@@ -1763,12 +1760,10 @@ function printByCaptain(selectedCaptains) {
             </tr>
           </thead>
           <tbody>`;
-
     let sn = 1;
     for (const o of orders.sort(sortByOrderNumber)) {
       html += `<tr>
-        <td style="color:#888;font-size:8px">#${o.order_number||'—'}</td>
-        <td style="text-align:center">${sn++}</td>
+        <td style="color:#888;font-size:23px"><strong>#${o.order_number||'—'}</strong></td>
         <td>${o.partner_name||'—'}</td>
         <td>
           <strong>${o.customer_name||'Unknown'}</strong>
