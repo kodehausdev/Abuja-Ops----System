@@ -1014,25 +1014,38 @@ async function patch(id, data) {
 async function loadOrders() {
   try {
     const data = await api('orders?select=id,order_number,raw_text,partner_name,customer_name,customer_phone1,customer_phone2,product,amount,raw_address,zone,verified,status,payment_method,report,order_date,created_at,closer_name,closer_phone,dispatcher_name,updated_by&order=order_date.desc,created_at.asc&limit=500');
-    allOrders = Array.isArray(data) ? data : [];
+    
+    // CRITICAL FIX: Only update if we actually got an array back!
+    if (data && Array.isArray(data)) {
+      allOrders = data;
+    } else {
+      console.warn('API did not return an array, keeping current orders.');
+      return; // Stop execution here so we don't break stats/filters
+    }
+
     totalOrdersCount = allOrders.length;
     try {
       totalOrdersCount = await apiCount('orders?select=id');
     } catch (countError) {
       console.warn('Could not load total order count, falling back to loaded count:', countError);
     }
+    
     updateStats();
     populateFilters();
     populateCaptainFilter();
     renderTable();
+    
+    // Fixed the 'now' date object issue from earlier as well
     document.getElementById('date-display').textContent =
-      now.toLocaleDateString('en-NG', { weekday:'short', day:'numeric', month:'short', year:'numeric' }) +
+      new Date().toLocaleDateString('en-NG', { weekday:'short', day:'numeric', month:'short', year:'numeric' }) +
       '  ·  Updated ' + new Date().toLocaleTimeString('en-NG', { hour:'2-digit', minute:'2-digit' });
+      
   } catch(e) {
     console.error('loadOrders error:', e);
-    showToast('⚠️ Could not load orders');
+    showToast('⚠️ Network glitch. Keeping offline data.');
   }
 }
+
 
 function updateStats() {
   const filterDate = document.getElementById('f-date')?.value;
