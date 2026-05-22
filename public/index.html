@@ -132,6 +132,36 @@ header {
 }
 .btn-refresh:hover { background: var(--border2); color: var(--text); }
 
+.floating-scroll {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  z-index: 150;
+}
+
+.floating-scroll button {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: 1px solid var(--border2);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 12px 30px rgba(0,0,0,.14);
+  transition: transform .15s ease, background .15s ease;
+}
+
+.floating-scroll button:hover {
+  transform: translateY(-2px);
+  background: var(--border2);
+}
+
 /* ── LAYOUT ── */
 .main { padding: 24px 28px; }
 
@@ -911,6 +941,11 @@ tr:hover td { background: rgba(255,255,255,.02); }
 <!-- Hidden print area -->
 <div id="print-area" style="display:none;"></div>
 
+<div class="floating-scroll">
+  <button onclick="scrollToOrders()" title="Scroll to orders">↓</button>
+  <button onclick="scrollToTop()" title="Back to top">↑</button>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -975,11 +1010,31 @@ async function getHeaders() {
 async function api(path) {
   try {
     const headers = await getHeaders(); // ← session JWT, not anon key
+    console.debug('api() request', { path, authHeader: headers.Authorization ? 'present' : 'none' });
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, { headers });
+    if (!r.ok) {
+      console.error('API request failed', { path, status: r.status, statusText: r.statusText });
+      throw new Error(`HTTP ${r.status}`);
+    }
+    return await r.json();
+  } catch (err) {
+    console.error('API fetch failed:', err);
+    return null;
+  }
+}
+
+async function apiAnon(path) {
+  try {
+    console.debug('apiAnon() request', { path });
+    const headers = {
+      'apikey': SUPABASE_KEY,
+      'Authorization': `Bearer ${SUPABASE_KEY}`
+    };
     const r = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, { headers });
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     return await r.json();
   } catch (err) {
-    console.error('API fetch failed:', err);
+    console.error('API anon fetch failed:', err);
     return null;
   }
 }
@@ -1064,6 +1119,14 @@ function updateStats() {
   document.getElementById('s-revenue').textContent = revenue >= 1000000
     ? '₦' + (revenue/1000000).toFixed(1) + 'M'
     : '₦' + (revenue/1000).toFixed(0) + 'k';
+}
+
+function scrollToOrders() {
+  window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' });
+}
+
+function scrollToTop() {
+  window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 function populateFilters() {
@@ -1493,16 +1556,22 @@ let allPartners = [];
 
 async function loadCaptains() {
   try {
-    const data = await api('dispatchers?select=name&order=name');
+    const data = await apiAnon('dispatchers?select=name&order=name');
     allCaptains = Array.isArray(data) ? data.map(d => d.name) : [];
-  } catch(e) { console.error('Could not load captains', e); }
+    console.debug('loadCaptains result', { count: allCaptains.length });
+  } catch(e) {
+    console.error('Could not load captains', e);
+  }
 }
 
 async function loadPartners() {
   try {
-    const data = await api('partners?select=name&order=name');
+    const data = await apiAnon('partners?select=name&order=name');
     allPartners = Array.isArray(data) ? data.map(d => d.name) : [];
-  } catch(e) { console.error('Could not load partners', e); }
+    console.debug('loadPartners result', { count: allPartners.length });
+  } catch(e) {
+    console.error('Could not load partners', e);
+  }
 }
 
 async function assignPartner(id, sel) {
@@ -2389,7 +2458,7 @@ document.getElementById('edit-modal').addEventListener('click', function(e) {
 (async () => {
   await loadConfig();
   await initAuth();
-  loadCaptains();
+  await loadCaptains();
   loadPartners();
   loadOrders();
   setInterval(loadOrders, 30000);
