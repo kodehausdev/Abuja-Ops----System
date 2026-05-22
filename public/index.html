@@ -2361,9 +2361,10 @@ function openEdit(id) {
   const o = allOrders.find(x => x.id === id);
   if (!o) return;
   editingId = id;
-  document.getElementById('edit-order-num').textContent = `#${o.order_number}`;
+  document.getElementById('edit-order-num').textContent = `#${o.order_number || '—'}`;
 
   const fields = [
+    { key: 'order_number',    label: 'Order #',        value: o.order_number || '' },
     { key: 'customer_name',   label: 'Customer Name', value: o.customer_name || '' },
     { key: 'customer_phone1', label: 'Phone 1',        value: o.customer_phone1 || '' },
     { key: 'customer_phone2', label: 'Phone 2',        value: o.customer_phone2 || '' },
@@ -2417,6 +2418,7 @@ async function deleteOrder(id) {
 async function saveEdit() {
   if (!editingId) return;
   const updates = {
+    order_number:    document.getElementById('ef-order_number').value.trim() || null,
     customer_name:   document.getElementById('ef-customer_name').value,
     customer_phone1: document.getElementById('ef-customer_phone1').value,
     customer_phone2: document.getElementById('ef-customer_phone2').value || null,
@@ -2432,8 +2434,10 @@ async function saveEdit() {
   await patch(editingId, updates);
   const o = allOrders.find(x => x.id === editingId);
   if (o) {
-    logActivity('Order edited', `#${o.order_number} ${o.customer_name}`, editingId);
+    const oldOrderNum = o.order_number;
     Object.assign(o, updates);
+    const newLabel = `#${o.order_number || '—'} ${o.customer_name}`.trim();
+    logActivity('Order edited', `${oldOrderNum && oldOrderNum !== o.order_number ? `#${oldOrderNum} → ${newLabel}` : newLabel}`, editingId);
   }
   closeEdit();
   renderTable();
