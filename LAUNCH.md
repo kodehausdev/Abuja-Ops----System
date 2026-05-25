@@ -38,7 +38,7 @@ The bot will walk through the order flow and save to Supabase ✅
 ## What the flow looks like:
 Customer: hi
 Bot: Welcome! What's your name?
-Customer: Seyi Seyi
+Customer: Seyi Fatoki
 Bot: What would you like to order?
 Customer: 2 bags of rice
 Bot: Quantity?

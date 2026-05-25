@@ -3,10 +3,10 @@ const axios = require('axios');
 
 const ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID;
 const AUTH_TOKEN  = process.env.TWILIO_AUTH_TOKEN;
-const FROM_NUMBER = process.env.TWILIO_WHATSAPP_NUMBER; // e.g. whatsapp:+14155238886
+const FROM_NUMBER = process.env.TWILIO_WHATSAPP_NUMBER; 
 
 async function send(to, body) {
-  // Ensure to has whatsapp: prefix
+
   const toFormatted = to.startsWith('whatsapp:') ? to : `whatsapp:${to}`;
   try {
     await axios.post(
