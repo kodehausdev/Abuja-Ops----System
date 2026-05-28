@@ -168,12 +168,12 @@ header {
 /* ── STATS ── */
 .stats {
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
-  gap: 10px;
-  margin-bottom: 20px;
+  gap: 12px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .stat {
+  min-width: 0;
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: 10px;
@@ -223,18 +223,21 @@ header {
 
 /* ── CONTROLS ── */
 .controls {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(240px, 2.2fr) repeat(4, minmax(160px, 1fr)) minmax(180px, 1.1fr) auto;
   gap: 10px;
   align-items: center;
   margin-bottom: 16px;
-  flex-wrap: wrap;
+}
+
+.controls > * {
+  min-width: 0;
 }
 
 .search-wrap {
   position: relative;
-  flex: 1;
-  min-width: 200px;
-  max-width: 320px;
+  min-width: 0;
+  width: 100%;
 }
 
 .search-wrap svg {
@@ -258,6 +261,7 @@ input[type=text], select, input[type=date] {
 }
 
 input[type=text] { padding-left: 32px; width: 100%; }
+input[type=date], select { width: 100%; }
 input[type=text]:focus, select:focus, input[type=date]:focus { border-color: var(--border2); }
 
 select option { background: var(--card); }
@@ -676,8 +680,7 @@ tr:hover td { background: rgba(255,255,255,.02); }
   <div class="header-right">
     <div class="live-pill"><div class="live-dot"></div>Live</div>
     <div class="date-display" id="date-display"></div>
-    <button class="btn-print" id="btn-slips" onclick="printSlips()">🖨 Slips</button>
-    <button class="btn-print" id="btn-cat" onclick="printCatalogue()">🖨 Catalogue</button>
+    <!-- Standalone Slips and Catalogue removed — use Print by Captain -->
     <button class="btn-print" id="btn-byc" onclick="showCaptainPicker()">🖨 By Captain</button>
     <!-- <button id="btn-paste-orders" onclick="showPasteOrders()" style="display:none;background:var(--green-bg);border:1px solid var(--green-dim);color:var(--green);border-radius:7px;padding:6px 14px;font-size:12px;cursor:pointer;margin-right:4px;font-family:var(--body);">📥 Paste Orders</button> -->
     <button class="btn-refresh" onclick="showAttendance()" style="margin-right:4px;">👥 Attendance</button>
@@ -710,14 +713,6 @@ tr:hover td { background: rgba(255,255,255,.02); }
       <div class="stat-label">Today</div>
       <div class="stat-value" id="s-today">—</div>
     </div>
-    <div class="stat s-pending">
-      <div class="stat-label">Pending</div>
-      <div class="stat-value" id="s-pending">—</div>
-    </div>
-    <div class="stat s-done">
-      <div class="stat-label">Delivered</div>
-      <div class="stat-value" id="s-done">—</div>
-    </div>
     <div class="stat s-zones">
       <div class="stat-label">Zones Active</div>
       <div class="stat-value" id="s-zones">—</div>
@@ -739,16 +734,14 @@ tr:hover td { background: rgba(255,255,255,.02); }
     </select>
     <select id="f-status" onchange="renderTable()">
       <option value="">All statuses</option>
-      <option value="pending">Pending</option>
       <option value="dispatched">Dispatched</option>
-      <option value="delivered">Delivered</option>
     </select>
     <input type="date" id="f-date" onchange="renderTable(); updateStats();"/>
     <select id="f-captain" onchange="renderTable(); document.getElementById('btn-copy-captain').style.display=this.value?'flex':'none';">
       <option value="">All captains</option>
     </select>
     <button id="btn-copy-captain" onclick="copyCaptainFiltered()"
-      style="display:none;background:var(--blue-bg);border:1px solid rgba(59,130,246,.3);color:#60a5fa;border-radius:7px;padding:6px 12px;font-size:11px;cursor:pointer;white-space:nowrap;">
+      style="display:none;background:var(--blue-bg);border:1px solid rgba(59,130,246,.3);color:#60a5fa;border-radius:7px;padding:6px 12px;font-size:11px;cursor:pointer;white-space:nowrap;width:100%;justify-content:center;">
       📋 Copy
     </button>
     <div class="tab-group">
@@ -776,12 +769,11 @@ tr:hover td { background: rgba(255,255,255,.02); }
             <th>Captain</th>
             <th>Staff</th>
             <th>Date</th>
-            <th>Status</th>
             <th>Action</th>
           </tr>
         </thead>
         <tbody id="table-body">
-          <tr><td colspan="12" class="empty"><div class="empty-icon">📦</div><div class="empty-text">Loading orders...</div></td></tr>
+          <tr><td colspan="13" class="empty"><div class="empty-icon">📦</div><div class="empty-text">Loading orders...</div></td></tr>
         </tbody>
       </table>
     </div>
@@ -1106,15 +1098,11 @@ function updateStats() {
   const filterDate = document.getElementById('f-date')?.value;
   const activeDate = filterDate || new Date(Date.now() + 60*60*1000).toISOString().split('T')[0];
   const todayOrders = allOrders.filter(o => (o.order_date || o.created_at?.split('T')[0]) === activeDate);
-  const pending   = todayOrders.filter(o => o.status === 'pending' || !o.status).length;
-  const delivered = todayOrders.filter(o => o.status === 'delivered').length;
   const zones     = new Set(todayOrders.map(o => o.zone).filter(Boolean)).size;
   const revenue   = todayOrders.reduce((s, o) => s + (Number(o.amount) || 0), 0);
 
   document.getElementById('s-total').textContent   = totalOrdersCount;
   document.getElementById('s-today').textContent   = todayOrders.length;
-  document.getElementById('s-pending').textContent = pending;
-  document.getElementById('s-done').textContent    = delivered;
   document.getElementById('s-zones').textContent   = zones;
   document.getElementById('s-revenue').textContent = revenue >= 1000000
     ? '₦' + (revenue/1000000).toFixed(1) + 'M'
@@ -1238,16 +1226,12 @@ function renderTable() {
         ${o.updated_by ? `<span title="${o.updated_by}">${o.updated_by.split(' ')[0]}</span>` : '—'}
       </td>
       <td class="cell-date">${time}</td>
-      <td><span class="badge badge-${status}">${status}</span></td>
       <td style="display:flex;flex-direction:column;gap:3px;align-items:flex-start;">
         ${canWrite ? (status === 'pending'
           ? `<button class="action-btn" onclick="updateStatus(${o.id}, 'dispatched')">Dispatch</button>`
           : status === 'dispatched'
-          ? `<div style="display:flex;flex-direction:column;gap:3px;">
-               <button class="action-btn deliver" onclick="updateStatus(${o.id}, 'delivered')">Deliver</button>
-               <button class="action-btn" style="font-size:9px;color:var(--amber);border-color:rgba(245,158,11,.3);" 
-                 onclick="undoDispatch(${o.id})" title="Undo dispatch — logged in activity">↩ Undo</button>
-             </div>`
+          ? `<button class="action-btn" style="font-size:9px;color:var(--amber);border-color:rgba(245,158,11,.3);" 
+               onclick="undoDispatch(${o.id})" title="Undo dispatch — logged in activity">↩ Undo</button>`
           : `<span style="color:var(--muted);font-size:10px;font-family:var(--mono)">done</span>`)
           : `<span style="color:var(--muted);font-size:10px;font-family:var(--mono);opacity:0.35;">—</span>`
         }
@@ -1423,104 +1407,7 @@ function getDateLabel() {
   return d.toLocaleDateString('en-NG', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
 }
 
-function printCatalogue() {
-  const rows = filtered();
-  if (!rows.length) { showToast('No orders to print'); return; }
-
-  // Group by zone
-  const byZone = {};
-  for (const o of rows) {
-    const z = o.zone || 'UNASSIGNED';
-    if (!byZone[z]) byZone[z] = [];
-    byZone[z].push(o);
-  }
-
-  const total = rows.reduce((s, o) => s + (Number(o.amount)||0), 0);
-  const cash = rows.filter(o => o.payment_method === 'C').length;
-  const transfer = rows.filter(o => o.payment_method === 'T').length;
-
-  let html = `
-    <div class="print-header">
-      <div>
-        <div class="print-title" style="font-size:20px;font-weight:900;text-transform:uppercase;letter-spacing:1px;">TCD — DAILY ORDER CATALOGUE</div>
-        <div style="font-size:11px;color:#555;margin-top:2px;">${getDateLabel()}</div>
-      </div>
-      <div class="print-meta">
-        ${rows.length} orders &nbsp;·&nbsp; ₦${total.toLocaleString()}
-      </div>
-    </div>
-        <table class="print-table">
-      <thead>
-        <tr>
-          <th style="width:28px">No</th>
-          <th style="width:95px">Seller Name</th>
-          <th>Customers Name</th>
-          <th>Products</th>
-          <th style="width:80px">Location</th>
-          <th style="width:95px">Customer Number</th>
-          <th style="width:22px">T/C</th>
-          <th style="width:70px">Report</th>
-          <th style="width:60px">Amount</th>
-        </tr>
-      </thead>
-      <tbody>`;
-
-  let sn = 1;
-  for (const [zone, zoneOrders] of Object.entries(byZone).sort()) {
-    for (const o of zoneOrders.sort(sortByOrderNumber)) {
-      html += `<tr>
-        <td style="color:#888;font-size:10px"><strong>#${o.order_number||'—'}</strong></td>
-        <td>${o.partner_name||'—'}</td>
-        <td>
-          <strong>${o.customer_name||'Unknown'}</strong>
-          ${o.report ? `<br><span style="font-size:13px;color:#e67e22;font-style:italic">( ${o.report} )</span>` : ''}
-        </td>
-        <td>${o.product||'—'}</td>
-        <td>${o.zone||'—'}</td>
-        <td style="font-family:'Arial Black',Arial,sans-serif;font-size:16px;font-weight:900;letter-spacing:0.5px;">${o.customer_phone1||'—'}${o.customer_phone2?'<br>'+o.customer_phone2:''}</td>
-        <td></td>
-        <td></td>
-        <td style="text-align:right;font-weight:700">₦${Number(o.amount||0).toLocaleString()}</td>
-      </tr>`;
-    }
-  }
-
-  html += `</tbody></table>`;
-
-  document.getElementById('print-area').innerHTML = html;
-  window.print();
-  showToast('🖨 Printing catalogue...');
-}
-
-function printSlips() {
-  const rows = filtered();
-  if (!rows.length) { showToast('No orders to print'); return; }
-  const sorted = [...rows].sort(sortByOrderNumber);
-  document.getElementById('print-area').innerHTML = buildSlipsHtml(sorted, `TCD — Dispatch Slips`, `${getDateLabel()} · ${rows.length} slips`);
-  window.print();
-  showToast('🖨 Printing slips...');
-}
-
-function buildSlipsHtml(orders, title, meta) {
-  let html = `
-    <div class="print-header">
-      <div class="print-title">${title}</div>
-      <div class="print-meta">${meta}</div>
-    </div>
-    <div class="slips-grid">`;
-
-  let sn = 1;
-  for (const o of orders) {
-    html += `
-      <div class="slip">
-        <div class="slip-num">#${sn++}</div>
-        <div class="slip-zone">${o.partner_name||'—'}</div>
-        <div class="slip-row"><span class="slip-label">Product</span><span class="slip-val">${o.product||'—'}</span></div>
-        <div class="slip-amount">₦${Number(o.amount||0).toLocaleString()}</div>
-      </div>`;
-  }
-  return html + `</div>`;
-}
+// Standalone Catalogue and Slips removed — printing is handled via Print by Captain (printByCaptain).
 
 function printSlipsByCaptain(selectedCaptains) {
   const rows = filtered();
@@ -1550,6 +1437,30 @@ function printSlipsByCaptain(selectedCaptains) {
   document.getElementById('print-area').innerHTML = html;
   window.print();
   showToast('🖨 Printing slips by captain...');
+}
+
+function buildSlipsHtml(orders, title, meta) {
+  let html = `
+    <div class="print-header">
+      <div class="print-title">${title}</div>
+      <div class="print-meta">${meta}</div>
+    </div>
+    <div class="slips-grid">`;
+
+  // Use the real order number when available, otherwise fall back to a sequential index.
+  let sn = 1;
+  for (const o of orders) {
+    const slipNum = o.order_number || (sn++);
+    html += `
+      <div class="slip">
+        <div class="slip-num">#${slipNum}</div>
+        <div class="slip-zone">${o.partner_name||'—'}</div>
+        <div class="slip-row"><span class="slip-label">Product</span><span class="slip-val">${o.product||'—'}</span></div>
+        <div class="slip-amount">₦${Number(o.amount||0).toLocaleString()}</div>
+      </div>`;
+  }
+
+  return html + `</div>`;
 }
 
 let allPartners = [];
@@ -1786,8 +1697,11 @@ function doPrintByCaptain() {
     Array.from(document.querySelectorAll('#captain-picker-list input:checked'))
       .map(cb => cb.value)
   );
-  if (captainPrintMode === 'slips') printSlipsByCaptain(selected);
-  else printByCaptain(selected);
+  if (captainPrintMode === 'slips') {
+    printSlipsByCaptain(selected);
+  } else {
+    printByCaptain(selected);
+  }
 }
 
 function printByCaptain(selectedCaptains) {
@@ -2183,14 +2097,13 @@ function copyAllForCaptain(captainName) {
 async function logActivity(action, detail, orderId = null) {
   if (!currentUser) return;
   try {
-    await fetch(`${SUPABASE_URL}/rest/v1/activity_log`, {
+    const headers = await getHeaders();
+    headers['Content-Type'] = 'application/json';
+    headers['Prefer'] = 'return=minimal';
+
+    let res = await fetch(`${SUPABASE_URL}/rest/v1/activity_log`, {
       method: 'POST',
-      headers: {
-        'apikey': SUPABASE_KEY,
-        'Authorization': `Bearer ${SUPABASE_KEY}`,
-        'Content-Type': 'application/json',
-        'Prefer': 'return=minimal'
-      },
+      headers,
       body: JSON.stringify({
         staff_email: currentUser.email,
         staff_name:  currentUser.user_metadata?.full_name || currentUser.email,
@@ -2200,6 +2113,32 @@ async function logActivity(action, detail, orderId = null) {
         created_at: new Date().toISOString()
       })
     });
+
+    if (!res.ok && res.status === 403) {
+      const anonHeaders = {
+        'apikey': SUPABASE_KEY,
+        'Authorization': `Bearer ${SUPABASE_KEY}`,
+        'Content-Type': 'application/json',
+        'Prefer': 'return=minimal'
+      };
+      res = await fetch(`${SUPABASE_URL}/rest/v1/activity_log`, {
+        method: 'POST',
+        headers: anonHeaders,
+        body: JSON.stringify({
+          staff_email: currentUser.email,
+          staff_name:  currentUser.user_metadata?.full_name || currentUser.email,
+          action,
+          detail,
+          order_id: orderId,
+          created_at: new Date().toISOString()
+        })
+      });
+    }
+
+    if (!res.ok) {
+      const err = await res.text().catch(() => 'Unknown error');
+      console.warn('Activity log write failed:', res.status, err);
+    }
   } catch(e) { console.warn('Activity log failed:', e); }
 }
 
@@ -2225,7 +2164,7 @@ async function loadActivityLog() {
   try {
     const start = `${date}T00:00:00.000Z`;
     const end   = `${date}T23:59:59.999Z`;
-    const data = await api(`activity_log?created_at=gte.${start}&created_at=lte.${end}&order=created_at.desc&limit=200`);
+    const data = await apiAnon(`activity_log?created_at=gte.${start}&created_at=lte.${end}&order=created_at.desc&limit=200`);
 
     if (!Array.isArray(data) || !data.length) {
       list.innerHTML = `<div style="color:var(--muted);font-size:12px;text-align:center;padding:40px;">No activity recorded for this date</div>`;
@@ -2401,7 +2340,7 @@ async function deleteOrder(id) {
   const label = o ? `#${o.order_number} ${o.customer_name || ''}`.trim() : `#${id}`;
   
   if (!confirm(`Delete order ${label}?\n\nThis cannot be undone.`)) return;
-  await fetch(`${SUPABASE_URL}/rest/v1/orders?id=eq.${id}`, {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/orders?id=eq.${id}`, {
     method: 'DELETE',
     headers: {
       'apikey': SUPABASE_KEY,
@@ -2409,10 +2348,16 @@ async function deleteOrder(id) {
       'Prefer': 'return=minimal'
     }
   });
-  allOrders = allOrders.filter(x => x.id !== id);
-  if (editingId === id) closeEdit();
-  renderTable();
-  showToast(`🗑 Order ${label} deleted`);
+
+  if (res.ok) {
+    await logActivity('Order deleted', `${label}`, id);
+    allOrders = allOrders.filter(x => x.id !== id);
+    if (editingId === id) closeEdit();
+    renderTable();
+    showToast(`🗑 Order ${label} deleted`);
+  } else {
+    showToast('❌ Could not delete order');
+  }
 }
 
 async function saveEdit() {
