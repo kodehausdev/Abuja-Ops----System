@@ -70,20 +70,26 @@ if (orderNum && order.force_captain) {
 
   // ── True duplicate: same phone + same product + same day → block ──
   if (order.customer_phone1 && order.product) {
-    const normalizePhone = p => p.replace(/\s+/g,'')
+    const normalizePhone = p => String(p).replace(/\s+/g,'')
       .replace(/^\+234/,'0')
       .replace(/^234(?=\d{10})/,'0');
     const incomingPhone = normalizePhone(order.customer_phone1);
+    // First 3 words of product — loose enough to catch repasted orders,
+    // strict enough not to collide on "Chicken Wings" vs "Chicken Rice"
+    const incomingProductKey = (order.product).toLowerCase().trim()
+      .split(/\s+/).slice(0, 3).join(' ');
 
     const { data: todayOrders } = await supabase
       .from('orders')
-      .select('id, customer_phone1')
-      .eq('order_date', today)
-      .ilike('product', `%${(order.product).split(' ')[0]}%`);
+      .select('id, customer_phone1, product')
+      .eq('order_date', today);
 
     const exactDup = (todayOrders || []).find(o => {
       if (!o.customer_phone1) return false;
-      return normalizePhone(o.customer_phone1) === incomingPhone;
+      if (normalizePhone(o.customer_phone1) !== incomingPhone) return false;
+      const dbProductKey = (o.product || '').toLowerCase().trim()
+        .split(/\s+/).slice(0, 3).join(' ');
+      return incomingProductKey === dbProductKey;
     });
 
     if (exactDup) {

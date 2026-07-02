@@ -6,6 +6,7 @@ const { saveOrder, getNextOrderNumberStart, assignCaptain } = require('./db');
 const { send: sendMeta }   = require('./whatsapp');
 const { send: sendTwilio } = require('./whatsapp-twilio');
 const { send: sendWhapi } = require('./whatsapp-whapi');
+const { send: sendWasender } = require('./whatsapp-wasender');
 const { createClient } = require('@supabase/supabase-js');
 
 const app = express();
@@ -21,10 +22,11 @@ app.get('/dashboard', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'dashboard.html'));
 });
 
-// Defaults to Twilio — set PROVIDER=meta in .env to fall back to Meta
+// Defaults to Twilio — set PROVIDER=wasender/whapi/meta in .env to switch
 const PROVIDER = (process.env.PROVIDER || 'twilio').toLowerCase();
-const send = PROVIDER === 'whapi' ? sendWhapi 
-           : PROVIDER === 'meta'  ? sendMeta 
+const send = PROVIDER === 'wasender' ? sendWasender
+           : PROVIDER === 'whapi'    ? sendWhapi
+           : PROVIDER === 'meta'     ? sendMeta
            : sendTwilio;
 
 console.log(`📡 Provider: ${PROVIDER.toUpperCase()}`);
@@ -135,6 +137,69 @@ app.post('/webhook/whapi', async (req, res) => {
   }, 10000); // 10 seconds is usually the "sweet spot" for bulk forwards
 });
 
+
+
+// ── WASENDER WEBHOOK ──────────────────────────────────────────
+app.post('/webhook/wasender', async (req, res) => {
+  // Verify the request is genuinely from WaSender
+  const secret = process.env.WASENDER_WEBHOOK_SECRET;
+  if (secret) {
+    const incoming = req.headers['x-webhook-signature'];
+    if (incoming !== secret) {
+      console.warn('⚠️ WaSender webhook secret mismatch — rejected');
+      return res.sendStatus(403);
+    }
+  }
+
+  res.sendStatus(200);
+
+  const event = req.body?.event;
+
+  // Ignore test pings and outbound confirmations
+  if (event === 'webhook.test' || event === 'message.sent') return;
+
+  console.log('📨 WaSender event:', event, JSON.stringify(req.body).slice(0, 300));
+
+  // WaSender Baileys format: data.messages is the message object
+  const msg = req.body?.data?.messages;
+  if (!msg) return;
+  if (msg.key?.fromMe) return; // ignore messages sent by the bot itself
+
+  const msgId = msg.key?.id || `${msg.key?.senderPn}:${Date.now()}`;
+  if (processed.has(msgId)) return;
+  processed.add(msgId);
+  if (processed.size > 1000) processed.clear();
+
+  const from = msg.key?.cleanedSenderPn
+    || (msg.key?.senderPn || '').split('@')[0].replace('+', '');
+  const text = (
+    msg.message?.conversation ||
+    msg.message?.extendedTextMessage?.text ||
+    ''
+  ).trim();
+
+  if (!from || !text) return;
+
+  console.log(`\n📩 [WaSender][${from}]: ${text.slice(0, 80)}`);
+
+  const lower = text.toLowerCase();
+  const isCommand = ['list', 'orders', 'help', 'edit'].some(cmd => lower.startsWith(cmd));
+
+  if (isCommand) return await handleMessage(from, text);
+
+  if (!messageQueue[from]) messageQueue[from] = { texts: [], timer: null };
+  messageQueue[from].texts.push(text);
+  console.log(`📥 Queued [${from}]: ${text.slice(0, 30)}... (${messageQueue[from].texts.length} in batch)`);
+
+  if (messageQueue[from].timer) clearTimeout(messageQueue[from].timer);
+  messageQueue[from].timer = setTimeout(async () => {
+    const fullBatch = messageQueue[from].texts.join('\n\n---\n\n');
+    const count = messageQueue[from].texts.length;
+    delete messageQueue[from];
+    console.log(`🚀 Processing BATCH of ${count} orders for ${from}`);
+    await handleMessage(from, fullBatch);
+  }, 10000);
+});
 
 
 // ── META WEBHOOK VERIFY ───────────────────────────────────────
@@ -370,9 +435,12 @@ async function handleMessage(from, text) {
     order.raw_text     = block;
     order.force_captain = captain;
 
-    const batchKey = `${order.customer_phone1}|${(order.product||'').split(' ')[0]}`;
-    if (seenInBatch.has(batchKey)) { results.duplicates.push(order); continue; }
-    seenInBatch.add(batchKey);
+    // Only deduplicate within batch when we have a phone — use first 3 words of product
+    // to avoid false positives like "Chicken Wings" vs "Chicken Rice"
+    const productKey = (order.product || '').toLowerCase().trim().split(/\s+/).slice(0, 3).join(' ');
+    const batchKey = order.customer_phone1 ? `${order.customer_phone1}|${productKey}` : null;
+    if (batchKey && seenInBatch.has(batchKey)) { results.duplicates.push(order); continue; }
+    if (batchKey) seenInBatch.add(batchKey);
 
     order.staff_phone = from;
     order.status      = 'pending';
@@ -618,12 +686,13 @@ app.post('/parse-orders', async (req, res) => {
     order.raw_text = block;
     order.force_captain = blockCaptain;
 
-    const batchKey = `${order.customer_phone1}|${(order.product || '').split(' ')[0]}`;
-    if (seenInBatch.has(batchKey)) {
+    const productKey2 = (order.product || '').toLowerCase().trim().split(/\s+/).slice(0, 3).join(' ');
+    const batchKey = order.customer_phone1 ? `${order.customer_phone1}|${productKey2}` : null;
+    if (batchKey && seenInBatch.has(batchKey)) {
       results.duplicates.push({ customer_name: order.customer_name, customer_phone1: order.customer_phone1, product: order.product });
       continue;
     }
-    seenInBatch.add(batchKey);
+    if (batchKey) seenInBatch.add(batchKey);
 
     order.staff_phone = 'dashboard';
     order.status = 'pending';
