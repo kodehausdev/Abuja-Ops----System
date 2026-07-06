@@ -353,6 +353,18 @@ tr:hover td { background: rgba(255,255,255,.02); }
   color: var(--muted2);
 }
 
+.privacy-mask .cell-customer,
+.privacy-mask .cell-phone,
+.privacy-mask .zone-order-name {
+  filter: blur(6px);
+  user-select: none;
+}
+
+.privacy-mask .cell-customer,
+.privacy-mask .cell-phone {
+  color: transparent;
+}
+
 .cell-product {
   font-size: 12px;
   max-width: 160px;
@@ -686,6 +698,7 @@ tr:hover td { background: rgba(255,255,255,.02); }
     <button class="btn-refresh" onclick="showAttendance()" style="margin-right:4px;">👥 Attendance</button>
     <button class="btn-refresh" onclick="showActivityLog()" style="margin-right:4px;">📋 Activity</button>
     <button id="btn-settings" onclick="showSettings()" style="margin-right:4px;display:none;">⚙️ Settings</button>
+    <button id="btn-privacy-toggle" class="btn-refresh" onclick="togglePrivacyMode()" style="margin-right:4px;">👁️ Blur PII</button>
     <button class="btn-refresh" onclick="loadOrders()">↻ Refresh</button>
     <div id="auth-area" style="display:flex;align-items:center;gap:8px;margin-left:4px;">
       <div id="auth-user" style="display:none;align-items:center;gap:8px;">
@@ -2253,6 +2266,15 @@ function handleAuthUser(user) {
   document.getElementById('auth-avatar').src = user.user_metadata?.avatar_url || '';
   updateWriteAccess();
   showToast(canWrite ? `✅ ${email} — write access` : `👁️ ${email} — view only (not in ops list)`);
+}
+
+let privacyMode = false;
+function togglePrivacyMode() {
+  privacyMode = !privacyMode;
+  document.body.classList.toggle('privacy-mask', privacyMode);
+  const btn = document.getElementById('btn-privacy-toggle');
+  if (btn) btn.textContent = privacyMode ? '🔒 Privacy On' : '👁️ Blur PII';
+  showToast(privacyMode ? '🔒 Sensitive data blurred' : '👁️ Sensitive data visible');
 }
 
 function handleSignOut() {
