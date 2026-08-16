@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "Read(//c/Users/SEYI/Downloads/gemini-thinker/**)",
-      "Bash(npm install *)"
+      "Bash(npm install *)",
+      "PowerShell(git checkout *)",
+      "PowerShell(git push *)"
     ]
   }
 }
