@@ -3,5 +3,5 @@ node_modules/
 CLAUDE.md
 prod.index.html
 back.index.html
-
+.claude/settings.local.json
 
