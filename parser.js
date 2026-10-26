@@ -162,7 +162,7 @@ Return this exact JSON:
 
 async function parseOrder(rawText) {
   try {
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' }); 
     const result = await model.generateContent(`${PROMPT}\n\nRAW ORDER:\n${rawText}`);
     const text = result.response.text().trim();
 
