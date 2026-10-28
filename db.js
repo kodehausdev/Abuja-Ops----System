@@ -46,12 +46,6 @@ async function saveOrder(order) {
     console.log(`🔢 Auto-assigned order number: #${orderNum}`);
   }
 
-  // ── Duplicate order_number check — scoped per captain ──
-  // Abdul's #5 and Anita's #5 are different orders — no conflict.
-  // Only block if the SAME captain already has this number today with a different customer.
-// ── Duplicate order_number check — ONLY when captain is explicitly assigned ──
-// Multiple sellers can each have their own #1, #2 etc — that's fine and expected.
-// Only enforce uniqueness within a specific captain's run.
 if (orderNum && order.force_captain) {
   const { data: numDup } = await supabase
     .from('orders')

@@ -2,7 +2,6 @@
 const fetch = require('node-fetch');
 
 function normalizeToWasender(from) {
-  // Strip "whatsapp:" prefix and "+" if present — WaSender wants plain digits e.g. 2348XXXXXXXXX
   return from
     .replace('whatsapp:', '')
     .replace('+', '')

@@ -2,8 +2,6 @@
 const fetch = require('node-fetch');
 
 function normalizeToWhapi(from) {
-  // Twilio sends "whatsapp:+2348XXXXXXXXX", Meta sends "2348XXXXXXXXX"
-  // Whapi wants "2348XXXXXXXXX@s.whatsapp.net"
   let num = from
     .replace('whatsapp:', '')
     .replace('+', '')
