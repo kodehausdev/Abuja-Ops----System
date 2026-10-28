@@ -6,3 +6,4 @@ back.index.html
 .claude/settings.local.json
 .grok.exe.old
 ngrok.exe
+env.json
